@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db import Base
@@ -12,8 +12,13 @@ def _now() -> datetime:
 
 class User(Base):
     __tablename__ = "users"
-    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Google account "sub" claim: stable for the account, unlike the email.
+    user_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    email: Mapped[str | None] = mapped_column(String(320))
+    name: Mapped[str | None] = mapped_column(String(200))
+    picture: Mapped[str | None] = mapped_column(String(1000))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class Profile(Base):
@@ -21,8 +26,7 @@ class Profile(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
     current_role: Mapped[str | None] = mapped_column(String(200))
     target_role: Mapped[str | None] = mapped_column(String(200))
-    ai_level: Mapped[str | None] = mapped_column(String(20))
-    ai_knowledge_text: Mapped[str | None] = mapped_column(Text)
+    ai_experience: Mapped[str | None] = mapped_column(String(20))
     domain: Mapped[str | None] = mapped_column(String(200))
     hours_per_week: Mapped[int | None] = mapped_column(Integer)
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)

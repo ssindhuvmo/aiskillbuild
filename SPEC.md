@@ -8,23 +8,33 @@ short plan (architecture, folder structure, data model, API endpoints, agent des
 React page and component layout) and wait for my approval.
 
 ## V1 user flow
+0. SIGN IN WITH GOOGLE: The user signs in with their Google account before using
+   the app. The header shows their name and picture with a "Sign out" option.
+   Returning users who sign in again see their saved profile and progress. Each
+   user can only see and change their own data.
 1. INTAKE (conversational): The user chats with the app, which collects exactly
    these five inputs:
    1) Current role (e.g. Backend Engineer, Data Analyst, QA Engineer)
    2) Target role (e.g. ML Engineer, AI Engineer, Data Scientist, MLOps Engineer)
-   3) Current AI knowledge: a level (None / Beginner / Intermediate / Advanced)
-      plus a free-text description of what they already know (e.g. "did Andrew
-      Ng's ML course, used the OpenAI API in a side project")
+   3) AI experience (ai_experience), exactly one of: None (haven't worked with AI
+      yet), Beginner (taken a course or tried some tools), Intermediate (built a
+      small AI/ML project), Experienced (used AI/ML in real work). Asked simply
+      ("Do you have any experience with AI?") with the four options as clickable
+      buttons in the chat; a typed answer is mapped to one option and confirmed
    4) Current domain: the industry the user works in today (e.g. FinTech, EdTech,
       Healthcare, Retail, Real Estate, or "Other" with free text)
    5) Hours per week they can devote to learning (a number, validated as 1–40)
+   A typed answer showing no prior AI knowledge ("nothing yet", "no") maps to None.
    The assistant asks a follow-up question only when an answer is missing, vague
    or invalid, then shows a summary of all five for the user to confirm or edit.
+   LLM output never bypasses deterministic validation: invalid or missing values
+   lead to a follow-up question, not a saved record. The chat renders assistant
+   messages as Markdown (lightweight and safe, no raw HTML).
    No resume upload in V1.
-2. PERSIST PROFILE: Save the confirmed profile to a database (user identifier plus
-   the five inputs, and the skills inferred in step 3).
+2. PERSIST PROFILE: Save the confirmed profile to a database, linked to the signed-in
+   Google user (the five inputs, and the skills inferred in step 3).
 3. SKILL-GAP ANALYSIS: Use the LLM to infer the user's likely current skills from
-   their current role, current domain and stated AI knowledge, and compare them to
+   their current role, current domain and AI experience, and compare them to
    what the target role needs. Treat the user's domain experience as a strength to
    build on: identify the most relevant AI use cases in that industry (e.g. fraud
    detection and credit risk in FinTech, personalized learning in EdTech, clinical
@@ -41,7 +51,7 @@ React page and component layout) and wait for my approval.
       papers and projects, tagged by skill, level, industry domain, format, cost,
       hours; include general AI resources plus some for each listed domain)
    b) live web search via the Anthropic web search tool
-   Rank results by relevance to the gap, fit with the user's AI knowledge level,
+   Rank results by relevance to the gap, fit with the user's AI experience,
    applicability to the user's industry domain, and time cost. Default to a mix of
    free and paid resources and of courses, papers and hands-on projects. Every
    resource must have a real URL — never invent links.
@@ -63,7 +73,8 @@ React page and component layout) and wait for my approval.
   keep the profile model and gap-analysis input easy to extend with resume data)
 - Job Match Agent, Resume Update Agent
 - Returning-user progress tracking and re-evaluation
-- Authentication beyond a simple user identifier, payments, scheduling reminders
+- Sign-in methods other than Google, roles/admin accounts, payments, scheduling
+  reminders
 
 ## Tech stack
 - Frontend: React (JavaScript) with Vite, React Router for pages (Intake chat,
@@ -76,25 +87,51 @@ React page and component layout) and wait for my approval.
 - Core logic: a separate Python package (e.g. core/) holding the agents, DB access
   and models. FastAPI routes only call into this package and contain no business
   logic
-- LLM: Anthropic API via the official Python SDK (model: claude-sonnet-5), with
-  structured JSON outputs validated by Pydantic
+- LLM: Anthropic API via the official Python SDK, with structured JSON outputs
+  validated by Pydantic. The model is configurable through ANTHROPIC_MODEL in
+  backend/.env (default claude-sonnet-5; use claude-haiku-4-5-20251001 for
+  cheaper development testing). All agents read the model from this one setting
+- Authentication: Google Sign-In using Google Identity Services on the frontend.
+  The backend verifies the Google ID token with the google-auth library against
+  GOOGLE_CLIENT_ID, creates or finds the user (Google "sub" as the stable user ID,
+  plus email, name and picture), and starts a session with a secure httpOnly
+  cookie signed with SESSION_SECRET. The user ID always comes from the session,
+  never from the URL or request body
 - Database: SQLite with SQLAlchemy (easy to move to Postgres later)
 - Knowledge base: seed JSON + a simple retrieval layer behind an interface, so I can
   swap in a vector store / RAG later
-- Config via .env (ANTHROPIC_API_KEY on the backend only; the API key must never
-  reach the frontend); never hard-code secrets
+- Config via backend/.env (ANTHROPIC_API_KEY, ANTHROPIC_MODEL, DATABASE_URL,
+  FRONTEND_ORIGIN, GOOGLE_CLIENT_ID, SESSION_SECRET) and frontend/.env
+  (VITE_GOOGLE_CLIENT_ID), each with a .env.example; the API key and session
+  secret stay on the backend only and must never reach the frontend; never
+  hard-code secrets
 
 ## Engineering requirements
 - Project layout with separate frontend/ and backend/ folders
 - Each agent (intake, gap analysis, course search, scheduler) is its own module with
   its own prompt file, clear inputs/outputs as Pydantic models
+- Every API endpoint requires a signed-in user and only returns or changes that
+  user's own data; user_id is not part of API paths
 - Keep the list of supported domains in one config file so new industries can be
   added without code changes
 - Store conversation state and every agent output in the DB so sessions can resume
 - Handle LLM/JSON errors with retries on the backend, return clear error responses,
   and show friendly error messages and loading states in the React UI
 - Unit tests (pytest) for the intake input validation, the scheduler's hour-budget
-  logic and the ranking function
+  logic and the ranking function, plus an intake flow test and auth tests
+  (signed-out requests are rejected; users cannot access each other's data).
+  Tests use a fake LLM client, mocked Google token verification and an in-memory
+  SQLite database, so they need no API key or network
+- Python virtual environment at backend/.venv. The README documents creating it
+  and running the app on Windows and macOS/Linux, including the pip truststore
+  workaround for machines with SSL certificate errors
+  (pip install --use-feature=truststore -r requirements.txt). If backend HTTPS
+  calls (e.g. to Google) hit the same SSL errors, use the Windows certificate
+  store via truststore; never disable certificate verification
+- Git at the project root with a .gitignore excluding .env files (backend and
+  frontend), *.db / *.sqlite*,
+  node_modules/, .venv/, __pycache__/ and dist/. Commit after each working
+  milestone
 - A README with setup and run steps for both backend and frontend, and a CLAUDE.md
   describing the architecture and conventions for future sessions
 - requirements.txt for the backend, package.json for the frontend, and a short demo
@@ -104,9 +141,10 @@ React page and component layout) and wait for my approval.
 
 ## Definition of done
 I can start the backend (uvicorn) and the frontend (npm run dev), open the app in
-my browser, enter my current role, target role, AI knowledge, current domain and
-weekly hours through the chat, confirm the summary, review and correct the
+my browser, sign in with Google, enter my current role, target role, AI
+experience, current domain and weekly hours through the chat, confirm the summary, review and correct the
 inferred skill gaps, edit the suggested resources by chatting, and get a saved
 6-month roadmap with working links, domain-relevant portfolio projects, and a plan
-that fits my weekly hours. Restarting the app and entering the same user identifier
-reloads my saved profile and roadmap.
+that fits my weekly hours. Restarting the app and signing in with the same Google
+account reloads my saved profile and roadmap, and a different Google account
+cannot see them.

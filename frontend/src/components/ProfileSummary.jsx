@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
+import { AI_EXPERIENCE } from "../aiExperience.js";
 import { confirmProfile, getDomains, updateProfile } from "../api.js";
 
-const LEVELS = ["None", "Beginner", "Intermediate", "Advanced"];
 const LABELS = {
   current_role: "Current role",
   target_role: "Target role",
-  ai_level: "AI level",
-  ai_knowledge_text: "AI knowledge",
+  ai_experience: "AI experience",
   domain: "Domain",
   hours_per_week: "Hours / week",
 };
 
-export default function ProfileSummary({ userId, profile, onChange }) {
+export default function ProfileSummary({ profile, onChange }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [domains, setDomains] = useState([]);
@@ -49,7 +48,7 @@ export default function ProfileSummary({ userId, profile, onChange }) {
     for (const k of Object.keys(LABELS)) {
       if (form[k] !== profile[k] && form[k] !== "" && form[k] != null) fields[k] = form[k];
     }
-    if (Object.keys(fields).length === 0 || (await run(() => updateProfile(userId, fields)))) setEditing(false);
+    if (Object.keys(fields).length === 0 || (await run(() => updateProfile(fields)))) setEditing(false);
   }
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -61,13 +60,12 @@ export default function ProfileSummary({ userId, profile, onChange }) {
         <div className="edit">
           <label>Current role<input value={form.current_role ?? ""} onChange={set("current_role")} /></label>
           <label>Target role<input value={form.target_role ?? ""} onChange={set("target_role")} /></label>
-          <label>AI level
-            <select value={form.ai_level ?? ""} onChange={set("ai_level")}>
+          <label>AI experience
+            <select value={form.ai_experience ?? ""} onChange={set("ai_experience")}>
               <option value="">—</option>
-              {LEVELS.map((l) => <option key={l}>{l}</option>)}
+              {AI_EXPERIENCE.map((o) => <option key={o.value} value={o.value}>{o.value} — {o.hint}</option>)}
             </select>
           </label>
-          <label>AI knowledge<textarea rows={3} value={form.ai_knowledge_text ?? ""} onChange={set("ai_knowledge_text")} /></label>
           <label>Domain
             <input list="domains" value={form.domain ?? ""} onChange={set("domain")} />
             <datalist id="domains">{domains.filter((d) => d !== "Other").map((d) => <option key={d} value={d} />)}</datalist>
@@ -92,7 +90,7 @@ export default function ProfileSummary({ userId, profile, onChange }) {
           {error && <p className="error">{error}</p>}
           <div className="row">
             <button className="secondary" onClick={startEdit}>Edit</button>
-            <button onClick={() => run(() => confirmProfile(userId))} disabled={!complete || profile.confirmed || busy}>
+            <button onClick={() => run(() => confirmProfile())} disabled={!complete || profile.confirmed || busy}>
               {profile.confirmed ? "Confirmed ✓" : "Confirm"}
             </button>
           </div>

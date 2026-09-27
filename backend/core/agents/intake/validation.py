@@ -1,8 +1,8 @@
 """Deterministic validation for the five intake inputs. The LLM never bypasses this."""
 from core.config import load_domains
 
-AI_LEVELS = ["None", "Beginner", "Intermediate", "Advanced"]
-FIELDS = ["current_role", "target_role", "ai_level", "ai_knowledge_text", "domain", "hours_per_week"]
+AI_EXPERIENCE = ["None", "Beginner", "Intermediate", "Experienced"]
+FIELDS = ["current_role", "target_role", "ai_experience", "domain", "hours_per_week"]
 VAGUE_ROLES = {"", "engineer", "developer", "tech", "it", "job", "work", "something", "anything", "ai", "idk", "n/a"}
 
 
@@ -19,19 +19,12 @@ def validate_role(value) -> tuple[str | None, str | None]:
     return v, None
 
 
-def validate_ai_level(value) -> tuple[str | None, str | None]:
+def validate_ai_experience(value) -> tuple[str | None, str | None]:
     v = _clean(value) if value is not None else ""
-    for level in AI_LEVELS:
-        if v.lower() == level.lower():
-            return level, None
-    return None, f"AI knowledge level must be one of: {', '.join(AI_LEVELS)}."
-
-
-def validate_ai_knowledge_text(value) -> tuple[str | None, str | None]:
-    v = _clean(value) if value is not None else ""
-    if len(v) < 3:
-        return None, "Please briefly describe what you already know about AI (or say 'nothing')."
-    return v[:1000], None
+    for option in AI_EXPERIENCE:
+        if v.lower() == option.lower():
+            return option, None
+    return None, f"AI experience must be one of: {', '.join(AI_EXPERIENCE)}."
 
 
 def validate_domain(value) -> tuple[str | None, str | None]:
@@ -67,8 +60,7 @@ def validate_hours(value) -> tuple[int | None, str | None]:
 VALIDATORS = {
     "current_role": validate_role,
     "target_role": validate_role,
-    "ai_level": validate_ai_level,
-    "ai_knowledge_text": validate_ai_knowledge_text,
+    "ai_experience": validate_ai_experience,
     "domain": validate_domain,
     "hours_per_week": validate_hours,
 }

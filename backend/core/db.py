@@ -18,3 +18,11 @@ def init_db() -> None:
     from core import models  # noqa: F401  (register tables)
 
     Base.metadata.create_all(engine)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

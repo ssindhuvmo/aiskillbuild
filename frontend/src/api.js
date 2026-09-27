@@ -1,3 +1,9 @@
+// Called on any 401 so the app can drop back to the sign-in screen (e.g. session expired).
+let onUnauthorized = () => {};
+export const setUnauthorizedHandler = (fn) => {
+  onUnauthorized = fn;
+};
+
 async function request(path, options) {
   let res;
   try {
@@ -5,6 +11,7 @@ async function request(path, options) {
   } catch {
     throw new Error("Cannot reach the server. Is the backend running on port 8000?");
   }
+  if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized();
   if (!res.ok) {
     let detail = "";
     try {
@@ -12,30 +19,39 @@ async function request(path, options) {
       const d = body.detail;
       detail = typeof d === "string" ? d : d?.errors ? Object.values(d.errors).join(" ") : "";
     } catch {}
-    throw new Error(detail || `Request failed (${res.status}).`);
+    throw Object.assign(new Error(detail || `Request failed (${res.status}).`), { status: res.status });
   }
   return res.json();
 }
 
-const u = (id) => `/api/users/${encodeURIComponent(id)}`;
 const json = (method, body) => ({
   method,
   headers: { "Content-Type": "application/json" },
   body: body ? JSON.stringify(body) : undefined,
 });
 
-export const getIntake = (id) => request(`${u(id)}/intake`);
+// The session cookie is httpOnly and same-origin (Vite proxies /api), so fetch sends it
+// automatically; no user ID is ever passed from the browser.
+export const getMe = () => request("/api/auth/me");
+export const googleLogin = (credential) => request("/api/auth/google", json("POST", { credential }));
+export const logout = () => request("/api/auth/logout", json("POST"));
+
+export const getIntake = () => request("/api/intake");
 export const getDomains = () => request("/api/domains");
-export const updateProfile = (id, fields) => request(`${u(id)}/profile`, json("PUT", fields));
-export const confirmProfile = (id) => request(`${u(id)}/profile/confirm`, json("POST"));
+export const updateProfile = (fields) => request("/api/profile", json("PUT", fields));
+export const confirmProfile = () => request("/api/profile/confirm", json("POST"));
 
 // Streams the reply over SSE. Handlers: onToken(text), onState(profile), onError(msg).
-export async function streamChat(id, message, { onToken, onState, onError }) {
+export async function streamChat(message, { onToken, onState, onError }) {
   let res;
   try {
-    res = await fetch(`${u(id)}/intake/chat`, json("POST", { message }));
+    res = await fetch("/api/intake/chat", json("POST", { message }));
   } catch {
     onError("Cannot reach the server. Is the backend running on port 8000?");
+    return;
+  }
+  if (res.status === 401) {
+    onUnauthorized();
     return;
   }
   if (!res.ok || !res.body) {

@@ -1,23 +1,10 @@
 """Exercises the intake tool loop and profile API with a fake LLM (no network)."""
-import os
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
 
-os.environ["DATABASE_URL"] = "sqlite://"  # in-memory; set before core.db is imported
-
-from sqlalchemy import create_engine  # noqa: E402
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
-from core import db as dbmod  # noqa: E402
-
-dbmod.engine.dispose()
-dbmod.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-dbmod.SessionLocal.configure(bind=dbmod.engine)
-
-from app.main import app  # noqa: E402
-from core.agents.intake import agent  # noqa: E402
+from core.agents.intake import agent
+from tests.conftest import login
 
 
 class FakeStream:
@@ -52,9 +39,8 @@ class FakeClient:
 
 
 @pytest.fixture()
-def client():
-    with TestClient(app) as c:
-        yield c
+def client(anon):
+    return login(anon, "t1")
 
 
 def test_tool_loop_validates_and_saves(client, monkeypatch):
@@ -65,9 +51,9 @@ def test_tool_loop_validates_and_saves(client, monkeypatch):
         ]
     )
     monkeypatch.setattr(agent, "get_client", lambda: fake)
-    r = client.post("/api/users/t1/intake/chat", json={"message": "I'm a backend engineer, 50 hrs"})
+    r = client.post("/api/intake/chat", json={"message": "I'm a backend engineer, 50 hrs"})
     assert r.status_code == 200 and "event: done" in r.text
-    state = client.get("/api/users/t1/intake").json()
+    state = client.get("/api/intake").json()
     p = state["profile"]
     assert p["current_role"] == "Backend Engineer"
     assert p["hours_per_week"] is None and "hours_per_week" in p["missing"]
@@ -75,19 +61,19 @@ def test_tool_loop_validates_and_saves(client, monkeypatch):
 
 
 def test_edit_and_confirm(client):
-    assert client.put("/api/users/t2/profile", json={"hours_per_week": 99}).status_code == 422
-    assert client.post("/api/users/t2/profile/confirm").status_code == 422  # incomplete
+    assert client.put("/api/profile", json={"hours_per_week": 99}).status_code == 422
+    assert client.post("/api/profile/confirm").status_code == 422  # incomplete
     full = dict(
-        current_role="Data Analyst", target_role="Data Scientist", ai_level="None",
-        ai_knowledge_text="nothing yet", domain="Healthcare", hours_per_week=5,
+        current_role="Data Analyst", target_role="Data Scientist", ai_experience="None",
+        domain="Healthcare", hours_per_week=5,
     )
-    assert client.put("/api/users/t2/profile", json=full).status_code == 200
-    assert client.post("/api/users/t2/profile/confirm").json()["confirmed"] is True
+    assert client.put("/api/profile", json=full).status_code == 200
+    assert client.post("/api/profile/confirm").json()["confirmed"] is True
     # editing after confirming requires re-confirmation
-    assert client.put("/api/users/t2/profile", json={"hours_per_week": 6}).json()["confirmed"] is False
+    assert client.put("/api/profile", json={"hours_per_week": 6}).json()["confirmed"] is False
 
 
 def test_missing_api_key_gives_friendly_error(client, monkeypatch):
     monkeypatch.setattr("core.llm.ANTHROPIC_API_KEY", "")
-    r = client.post("/api/users/t3/intake/chat", json={"message": "hi"})
+    r = client.post("/api/intake/chat", json={"message": "hi"})
     assert "event: error" in r.text and "ANTHROPIC_API_KEY" in r.text

@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 
 from core.agents.intake.validation import FIELDS, missing_fields, validate_field
-from core.models import Conversation, Profile, User
+from core.models import Conversation, Profile, User, _now
 from core.schemas import ChatMessage, ProfileOut, ProfileUpdate
 
 
@@ -12,10 +12,23 @@ class ValidationFailed(Exception):
         super().__init__(str(errors))
 
 
-def _ensure_user(db: Session, user_id: str) -> Profile:
-    if db.get(User, user_id) is None:
-        db.add(User(user_id=user_id))
-        db.flush()
+def upsert_google_user(db: Session, claims: dict) -> User:
+    """Create the user on first sign-in; refresh email, name and picture on every sign-in."""
+    user = db.get(User, claims["sub"])
+    if user is None:
+        user = User(user_id=claims["sub"])
+        db.add(user)
+    user.email = claims.get("email")
+    user.name = claims.get("name") or claims.get("email")
+    user.picture = claims.get("picture")
+    user.last_login_at = _now()
+    db.commit()
+    return user
+
+
+def _ensure_profile(db: Session, user_id: str) -> Profile:
+    """Return the user's profile, creating an empty one if needed. The user row itself
+    is created at sign-in (upsert_google_user)."""
     profile = db.get(Profile, user_id)
     if profile is None:
         profile = Profile(user_id=user_id, confirmed=False)
@@ -29,18 +42,16 @@ def _profile_dict(profile: Profile) -> dict:
 
 
 def get_profile(db: Session, user_id: str) -> ProfileOut:
-    profile = _ensure_user(db, user_id)
+    profile = _ensure_profile(db, user_id)
     db.commit()
     data = _profile_dict(profile)
-    return ProfileOut(
-        user_id=user_id, confirmed=profile.confirmed, missing=missing_fields(data), **data
-    )
+    return ProfileOut(confirmed=profile.confirmed, missing=missing_fields(data), **data)
 
 
 def apply_updates(db: Session, user_id: str, updates: dict) -> tuple[dict, dict[str, str]]:
     """Validate and save each provided field. Returns (accepted, errors). Any change
     to the profile un-confirms it so the user re-confirms the edited summary."""
-    profile = _ensure_user(db, user_id)
+    profile = _ensure_profile(db, user_id)
     accepted: dict = {}
     errors: dict[str, str] = {}
     for field, raw in updates.items():
@@ -67,7 +78,7 @@ def update_profile(db: Session, user_id: str, body: ProfileUpdate) -> ProfileOut
 
 
 def confirm_profile(db: Session, user_id: str) -> ProfileOut:
-    profile = _ensure_user(db, user_id)
+    profile = _ensure_profile(db, user_id)
     missing = missing_fields(_profile_dict(profile))
     if missing:
         raise ValidationFailed({f: "Required before confirming." for f in missing})
@@ -77,7 +88,7 @@ def confirm_profile(db: Session, user_id: str) -> ProfileOut:
 
 
 def _conversation(db: Session, user_id: str) -> Conversation:
-    _ensure_user(db, user_id)
+    _ensure_profile(db, user_id)
     conv = (
         db.query(Conversation).filter_by(user_id=user_id, kind="intake").one_or_none()
     )

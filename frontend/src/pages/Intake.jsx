@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import Markdown from "react-markdown";
+import { AI_EXPERIENCE } from "../aiExperience.js";
 import { getIntake, streamChat } from "../api.js";
 import ProfileSummary from "../components/ProfileSummary.jsx";
 
 const GREETING =
-  "Hi! I'll ask a few quick questions to build your profile: your current role, the AI role you're aiming for, what you already know about AI, the industry you work in, and how many hours a week you can study. Let's start — what's your current role?";
+  "Hi! I'll ask a few quick questions to build your profile: your current role, the AI role you're aiming for, your experience with AI, the industry you work in, and how many hours a week you can study. Let's start — what's your current role?";
 
-export default function Intake({ userId }) {
+export default function Intake() {
   const [messages, setMessages] = useState([]);
   const [profile, setProfile] = useState(null);
   const [input, setInput] = useState("");
@@ -18,7 +20,7 @@ export default function Intake({ userId }) {
     let cancelled = false;
     setProfile(null);
     setLoadError("");
-    getIntake(userId)
+    getIntake()
       .then((s) => {
         if (cancelled) return;
         setMessages(s.messages);
@@ -28,21 +30,26 @@ export default function Intake({ userId }) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, []);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, sending]); // also after a reply finishes, so the answer buttons scroll into view
 
   async function send(e) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text) return;
     setInput("");
+    await sendText(text);
+  }
+
+  async function sendText(text) {
+    if (sending) return;
     setError("");
     setSending(true);
     setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
-    await streamChat(userId, text, {
+    await streamChat(text, {
       onToken: (t) =>
         setMessages((m) => {
           const copy = m.slice();
@@ -61,14 +68,35 @@ export default function Intake({ userId }) {
   if (!profile) return <main className="card"><p>Loading…</p></main>;
 
   const shown = messages.length === 0 ? [{ role: "assistant", content: GREETING }] : messages;
+  // The agent asks fields in order, so AI experience being the first missing field means
+  // the latest question is about it. Typing an answer instead still works.
+  const showExperience =
+    !sending && profile.missing[0] === "ai_experience" && shown[shown.length - 1].role === "assistant";
 
   return (
     <main className="intake">
       <section className="card chat">
         <div className="log">
           {shown.map((m, i) => (
-            <div key={i} className={`msg ${m.role}`}>{m.content || (sending ? "…" : "")}</div>
+            <div key={i} className={`msg ${m.role}`}>
+              {m.role === "assistant" && m.content ? (
+                // react-markdown escapes raw HTML by default (no rehype-raw), so this stays safe.
+                <Markdown>{m.content}</Markdown>
+              ) : (
+                m.content || (sending ? "…" : "")
+              )}
+            </div>
           ))}
+          {showExperience && (
+            <div className="choices">
+              {AI_EXPERIENCE.map((o) => (
+                <button key={o.value} type="button" className="choice" onClick={() => sendText(o.value)}>
+                  <strong>{o.value}</strong>
+                  <span>{o.hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div ref={bottom} />
         </div>
         {error && <p className="error">{error}</p>}
@@ -82,7 +110,7 @@ export default function Intake({ userId }) {
           <button type="submit" disabled={sending || !input.trim()}>{sending ? "…" : "Send"}</button>
         </form>
       </section>
-      <ProfileSummary userId={userId} profile={profile} onChange={setProfile} />
+      <ProfileSummary profile={profile} onChange={setProfile} />
     </main>
   );
 }

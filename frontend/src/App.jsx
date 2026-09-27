@@ -1,51 +1,52 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { getMe, googleLogin, logout, setUnauthorizedHandler } from "./api.js";
+import GoogleSignIn, { loadGis } from "./components/GoogleSignIn.jsx";
 import StepIndicator from "./components/StepIndicator.jsx";
 import Intake from "./pages/Intake.jsx";
 import Placeholder from "./pages/Placeholder.jsx";
 
 export default function App() {
-  const [userId, setUserId] = useState(() => {
+  const [user, setUser] = useState(undefined); // undefined = checking session, null = signed out
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null));
+    getMe()
+      .then(setUser)
+      .catch((e) => {
+        setUser(null);
+        if (e.status !== 401) setError(e.message);
+      });
+  }, []);
+
+  const signIn = useCallback(async (credential) => {
+    setError("");
     try {
-      return localStorage.getItem("userId") || "";
-    } catch {
-      return "";
+      setUser(await googleLogin(credential));
+    } catch (e) {
+      setError(e.message);
     }
-  });
-  const [draft, setDraft] = useState("");
+  }, []);
 
-  function signIn(e) {
-    e.preventDefault();
-    const id = draft.trim();
-    if (!id) return;
+  async function signOut() {
     try {
-      localStorage.setItem("userId", id);
+      await logout();
     } catch {}
-    setUserId(id);
+    // Stop Google One Tap from silently signing the same account back in.
+    loadGis().then((g) => g.accounts.id.disableAutoSelect()).catch(() => {});
+    setUser(null);
   }
 
-  function signOut() {
-    try {
-      localStorage.removeItem("userId");
-    } catch {}
-    setUserId("");
-  }
+  if (user === undefined) return <main className="card login"><p>Loading…</p></main>;
 
-  if (!userId) {
+  if (!user) {
     return (
       <main className="card login">
         <h1>AI Career Strategist</h1>
-        <p>Enter a user identifier. Use the same one next time to reload your saved profile.</p>
-        <form onSubmit={signIn}>
-          <input
-            autoFocus
-            value={draft}
-            maxLength={64}
-            placeholder="e.g. sindhu"
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <button type="submit" disabled={!draft.trim()}>Start</button>
-        </form>
+        <p>Sign in to start or continue your career plan. Your profile is saved to your Google account.</p>
+        <GoogleSignIn onCredential={signIn} />
+        {error && <p className="error">{error}</p>}
       </main>
     );
   }
@@ -55,13 +56,14 @@ export default function App() {
       <header>
         <h1>AI Career Strategist</h1>
         <span className="user">
-          {userId} · <button className="link" onClick={signOut}>switch user</button>
+          {user.picture && <img className="avatar" src={user.picture} alt="" referrerPolicy="no-referrer" />}
+          <span title={user.email}>{user.name}</span> · <button className="link" onClick={signOut}>Sign out</button>
         </span>
       </header>
       <StepIndicator />
       <Routes>
         <Route path="/" element={<Navigate to="/intake" replace />} />
-        <Route path="/intake" element={<Intake userId={userId} />} />
+        <Route path="/intake" element={<Intake />} />
         <Route path="/gaps" element={<Placeholder title="Skill Gaps" />} />
         <Route path="/resources" element={<Placeholder title="Resources" />} />
         <Route path="/roadmap" element={<Placeholder title="Roadmap" />} />

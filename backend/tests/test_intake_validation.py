@@ -2,7 +2,7 @@ import pytest
 
 from core.agents.intake.validation import (
     missing_fields,
-    validate_ai_level,
+    validate_ai_experience,
     validate_domain,
     validate_hours,
     validate_role,
@@ -26,9 +26,12 @@ def test_role():
         assert validate_role(bad)[0] is None
 
 
-def test_ai_level_case_insensitive():
-    assert validate_ai_level("beginner") == ("Beginner", None)
-    assert validate_ai_level("expert")[0] is None
+def test_ai_experience_options():
+    assert validate_ai_experience(" beginner ") == ("Beginner", None)
+    assert validate_ai_experience("EXPERIENCED") == ("Experienced", None)
+    assert validate_ai_experience("none") == ("None", None)
+    for bad in ["Advanced", "expert", "", None]:
+        assert validate_ai_experience(bad)[0] is None
 
 
 def test_domain():
@@ -40,5 +43,5 @@ def test_domain():
 
 def test_missing_fields():
     assert "hours_per_week" in missing_fields({"current_role": "x"})
-    full = dict(current_role="a", target_role="b", ai_level="None", ai_knowledge_text="c", domain="d", hours_per_week=5)
+    full = dict(current_role="a", target_role="b", ai_experience="None", domain="d", hours_per_week=5)
     assert missing_fields(full) == []

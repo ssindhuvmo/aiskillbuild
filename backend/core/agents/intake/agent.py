@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from core import repository
-from core.agents.intake.validation import AI_LEVELS, FIELDS, missing_fields
+from core.agents.intake.validation import AI_EXPERIENCE, FIELDS, missing_fields
 from core.config import load_domains
 from core.llm import MODEL, friendly_error, get_client
 
@@ -26,8 +26,7 @@ RECORD_PROFILE_TOOL = {
         "properties": {
             "current_role": {"type": "string"},
             "target_role": {"type": "string"},
-            "ai_level": {"type": "string", "enum": AI_LEVELS},
-            "ai_knowledge_text": {"type": "string"},
+            "ai_experience": {"type": "string", "enum": AI_EXPERIENCE},
             "domain": {"type": "string", "description": "Industry; for 'Other' the actual industry name"},
             "hours_per_week": {"type": "integer"},
         },
