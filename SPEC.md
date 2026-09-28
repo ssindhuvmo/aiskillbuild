@@ -55,9 +55,18 @@ React page and component layout) and wait for my approval.
    applicability to the user's industry domain, and time cost. Default to a mix of
    free and paid resources and of courses, papers and hands-on projects. Every
    resource must have a real URL — never invent links.
+   Built as a LangGraph graph with nodes for: retrieving from the knowledge base,
+   live web search, merging and de-duplicating candidates, verifying URLs,
+   ranking, and presenting the list.
 5. CONVERSATIONAL REFINEMENT: Show the ranked list and let the user chat to change it
    ("remove this", "I prefer free ones", "add more hands-on projects", "I already know
    PyTorch"). The agent updates the list and explains its changes.
+   Refinement is part of the same LangGraph graph as step 4: after presenting, the
+   graph pauses for user input (LangGraph interrupt / human-in-the-loop),
+   interprets the request, updates the list (re-searching only when needed),
+   explains the changes and pauses again until the user approves the list. Graph
+   state is persisted per signed-in user (LangGraph SQLite checkpointer or the
+   existing database) so refinement resumes after sign-out and sign-in.
 6. SCHEDULER AGENT: Turn the approved resource list into a 6-month roadmap that respects
    the weekly hours: monthly themes, week-by-week tasks, milestones and a portfolio
    project per phase. Portfolio projects should solve a realistic problem from the
@@ -91,6 +100,11 @@ React page and component layout) and wait for my approval.
   validated by Pydantic. The model is configurable through ANTHROPIC_MODEL in
   backend/.env (default claude-sonnet-5; use claude-haiku-4-5-20251001 for
   cheaper development testing). All agents read the model from this one setting
+- Orchestration: LangGraph for the Course Search Agent and conversational
+  refinement (V1 user flow steps 4 and 5). The intake and gap agents stay as
+  plain Python modules. LLM calls inside graph nodes go through core/llm.py so the
+  model stays configurable via ANTHROPIC_MODEL. The graph lives in
+  core/agents/course_search/ and FastAPI routes only invoke it
 - Authentication: Google Sign-In using Google Identity Services on the frontend.
   The backend verifies the Google ID token with the google-auth library against
   GOOGLE_CLIENT_ID, creates or finds the user (Google "sub" as the stable user ID,
@@ -122,6 +136,9 @@ React page and component layout) and wait for my approval.
   (signed-out requests are rejected; users cannot access each other's data).
   Tests use a fake LLM client, mocked Google token verification and an in-memory
   SQLite database, so they need no API key or network
+- Tests run the course search / refinement graph end to end with the fake LLM
+  client and a fake search tool (no network), covering the pause/resume
+  refinement loop and approval
 - Python virtual environment at backend/.venv. The README documents creating it
   and running the app on Windows and macOS/Linux, including the pip truststore
   workaround for machines with SSL certificate errors
@@ -138,6 +155,21 @@ React page and component layout) and wait for my approval.
   walkthrough with two sample user profiles (e.g. "Backend Engineer in FinTech →
   AI Engineer, Beginner, 8 hrs/week" and "Data Analyst in Healthcare → Data
   Scientist, None, 5 hrs/week")
+
+## Milestones
+Build one milestone at a time and stop after each so it can be tested.
+1. React + FastAPI skeleton and conversational intake (flow steps 1–2) — done
+2. Google sign-in: sessions, per-user data, sign-in/sign-out UI (flow step 0) — done
+3. Skill-gap analysis: gap agent with validated JSON and retries, Skill Gaps page,
+   user corrections, saved results (flow step 3) — done
+4. Knowledge base + ranking: seed JSON knowledge base, retrieval layer and ranking
+   function, Resources page with the ranked list (flow step 4a). Retrieval and
+   ranking stay plain, reusable Python functions so milestone 5 can wrap them as
+   graph nodes
+5. Live web search + conversational refinement (flow steps 4b–5). Introduces
+   LangGraph: the course search / refinement graph with URL verification,
+   pause/resume refinement and approval
+6. Scheduler agent, roadmap view, saving and Markdown export (flow steps 6–7)
 
 ## Definition of done
 I can start the backend (uvicorn) and the frontend (npm run dev), open the app in

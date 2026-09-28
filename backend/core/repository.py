@@ -2,8 +2,9 @@
 from sqlalchemy.orm import Session
 
 from core.agents.intake.validation import FIELDS, missing_fields, validate_field
-from core.models import Conversation, Profile, User, _now
-from core.schemas import ChatMessage, ProfileOut, ProfileUpdate
+from core.agents.gap_analysis.schemas import Correction, GapAnalysis
+from core.models import AgentOutput, Conversation, GapAnalysisRecord, Profile, User, _now
+from core.schemas import ChatMessage, GapState, ProfileOut, ProfileUpdate
 
 
 class ValidationFailed(Exception):
@@ -66,6 +67,7 @@ def apply_updates(db: Session, user_id: str, updates: dict) -> tuple[dict, dict[
         setattr(profile, field, value)
     if accepted:
         profile.confirmed = False
+        _unconfirm_gaps(db, profile)
     db.commit()
     return accepted, errors
 
@@ -109,3 +111,64 @@ def append_message(db: Session, user_id: str, role: str, content: str) -> None:
     conv = _conversation(db, user_id)
     conv.messages = [*conv.messages, {"role": role, "content": content}]  # reassign so JSON change is detected
     db.commit()
+
+
+# --- Skill-gap analysis -------------------------------------------------------------
+
+
+def _unconfirm_gaps(db: Session, profile: Profile) -> None:
+    """A profile edit means the confirmed skills may no longer apply."""
+    record = db.get(GapAnalysisRecord, profile.user_id)
+    if record is not None:
+        record.confirmed = False
+    profile.inferred_skills = None
+
+
+def get_gap_state(db: Session, user_id: str) -> GapState:
+    profile = get_profile(db, user_id)
+    record = db.get(GapAnalysisRecord, user_id)
+    if record is None:
+        return GapState(status="none", profile=profile)
+    current = {f: getattr(profile, f) for f in FIELDS}
+    return GapState(
+        status="ready",
+        profile=profile,
+        analysis=GapAnalysis.model_validate(record.analysis),
+        corrections=[Correction.model_validate(c) for c in record.corrections],
+        confirmed=record.confirmed,
+        stale=record.profile_snapshot != current,
+    )
+
+
+def save_gap_analysis(
+    db: Session, user_id: str, analysis: GapAnalysis, corrections: list[Correction], snapshot: dict
+) -> GapState:
+    data = analysis.model_dump()
+    record = db.get(GapAnalysisRecord, user_id)
+    if record is None:
+        record = GapAnalysisRecord(user_id=user_id)
+        db.add(record)
+    record.analysis = data
+    record.corrections = [c.model_dump() for c in corrections]
+    record.profile_snapshot = snapshot
+    record.confirmed = False
+    db.add(
+        AgentOutput(
+            user_id=user_id,
+            agent="gap_analysis",
+            output={"input": snapshot, "corrections": record.corrections, "analysis": data},
+        )
+    )
+    db.commit()
+    return get_gap_state(db, user_id)
+
+
+def confirm_gaps(db: Session, user_id: str) -> GapState:
+    """Mark the analysis confirmed and store the confirmed strengths on the profile."""
+    state = get_gap_state(db, user_id)
+    if state.status != "ready" or state.stale:
+        raise ValidationFailed({"analysis": "Run the skill-gap analysis for your current profile first."})
+    db.get(GapAnalysisRecord, user_id).confirmed = True
+    _ensure_profile(db, user_id).inferred_skills = {"strengths": [s.model_dump() for s in state.analysis.strengths]}
+    db.commit()
+    return get_gap_state(db, user_id)

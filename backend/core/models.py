@@ -30,7 +30,7 @@ class Profile(Base):
     domain: Mapped[str | None] = mapped_column(String(200))
     hours_per_week: Mapped[int | None] = mapped_column(Integer)
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Filled by the gap-analysis agent in a later milestone; resume data can extend this.
+    # Confirmed strengths from the gap-analysis agent; resume data can extend this in V2.
     inferred_skills: Mapped[dict | None] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
@@ -51,3 +51,15 @@ class AgentOutput(Base):
     agent: Mapped[str] = mapped_column(String(32))
     output: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class GapAnalysisRecord(Base):
+    """The user's current skill-gap analysis (every run is also logged in agent_outputs)."""
+
+    __tablename__ = "gap_analyses"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    analysis: Mapped[dict] = mapped_column(JSON)  # GapAnalysis
+    corrections: Mapped[list] = mapped_column(JSON, default=list)  # list[Correction]
+    profile_snapshot: Mapped[dict] = mapped_column(JSON)  # the five inputs it was based on
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)

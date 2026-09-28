@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 
 const STEPS = [
   { to: "/intake", label: "Intake", ready: true },
-  { to: "/gaps", label: "Skill Gaps" },
+  { to: "/gaps", label: "Skill Gaps", ready: true },
   { to: "/resources", label: "Resources" },
   { to: "/roadmap", label: "Roadmap" },
 ];

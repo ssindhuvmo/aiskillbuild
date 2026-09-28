@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { AI_EXPERIENCE } from "../aiExperience.js";
 import { confirmProfile, getDomains, updateProfile } from "../api.js";
 
@@ -94,7 +95,11 @@ export default function ProfileSummary({ profile, onChange }) {
               {profile.confirmed ? "Confirmed ✓" : "Confirm"}
             </button>
           </div>
-          {profile.confirmed && <p className="ok">Profile saved. Skill-gap analysis arrives in the next milestone.</p>}
+          {profile.confirmed && (
+            <p className="ok">
+              Profile saved. <Link to="/gaps">Continue to Skill Gaps →</Link>
+            </p>
+          )}
         </>
       )}
     </aside>

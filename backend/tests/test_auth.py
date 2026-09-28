@@ -14,12 +14,15 @@ PROTECTED = [
     ("post", "/api/intake/chat", {"message": "hi"}),
     ("put", "/api/profile", {"hours_per_week": 5}),
     ("post", "/api/profile/confirm", None),
+    ("get", "/api/gaps", None),
+    ("post", "/api/gaps/analyze", {}),
+    ("post", "/api/gaps/confirm", None),
 ]
 
 
 def test_endpoints_require_login(anon):
     for method, path, body in PROTECTED:
-        r = getattr(anon, method)(path, **({"json": body} if body else {}))
+        r = getattr(anon, method)(path, **({"json": body} if body is not None else {}))
         assert r.status_code == 401, (method, path)
     assert anon.get("/api/health").status_code == 200
 

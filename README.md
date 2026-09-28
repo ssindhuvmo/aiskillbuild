@@ -2,9 +2,13 @@
 
 Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full V1.
 
-**Current status: Milestone 2** — React + FastAPI skeleton, Google sign-in with per-user sessions, and the
-conversational intake that collects the five inputs and saves the profile to SQLite. Later steps (skill gaps,
-resources, roadmap) are placeholder pages.
+**Current status: Milestone 3 of 6** (see Milestones in `SPEC.md`):
+1. React + FastAPI skeleton and conversational intake — done
+2. Google sign-in with per-user sessions — done
+3. Skill-gap analysis with user corrections — done
+4. Knowledge base + ranking — Resources is a placeholder page
+5. Live web search + refinement chat (LangGraph)
+6. Roadmap — placeholder page
 
 ## Google sign-in setup (once)
 
@@ -59,5 +63,12 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
 1. Start both servers, open http://localhost:5173 and click **Sign in with Google**.
 2. Chat through the five inputs (try an invalid answer like "50 hours/week" to see follow-ups).
 3. Review the profile card, edit if needed, click **Confirm**.
-4. Restart the servers and sign in with the same Google account — the chat and profile reload.
-   A different Google account starts with an empty profile.
+4. Click **Continue to Skill Gaps**. The analysis starts automatically and takes 20–40 seconds.
+5. Review strengths (marked *Assumed* or *You said*), gaps and domain AI use cases. Correct anything with
+   **I don't have this** / **I already know this** or a free-text note, then click **Update analysis**.
+6. Click **Confirm skills**.
+7. Restart the servers and sign in with the same Google account — the chat, profile and skill analysis reload.
+   A different Google account starts empty. Editing the profile marks the analysis out of date.
+
+Sample profiles: "Backend Engineer in FinTech → AI Engineer, Beginner, 8 hrs/week" and
+"Data Analyst in Healthcare → Data Scientist, None, 5 hrs/week".

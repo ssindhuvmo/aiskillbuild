@@ -1,4 +1,8 @@
+from typing import Literal
+
 from pydantic import BaseModel
+
+from core.agents.gap_analysis.schemas import Correction, GapAnalysis
 
 
 class UserOut(BaseModel):
@@ -43,3 +47,16 @@ class ChatIn(BaseModel):
 class IntakeState(BaseModel):
     messages: list[ChatMessage]
     profile: ProfileOut
+
+
+class GapState(BaseModel):
+    status: Literal["none", "ready"]
+    profile: ProfileOut
+    analysis: GapAnalysis | None = None
+    corrections: list[Correction] = []
+    confirmed: bool = False
+    stale: bool = False  # the profile changed since this analysis was made
+
+
+class AnalyzeIn(BaseModel):
+    corrections: list[Correction] = []

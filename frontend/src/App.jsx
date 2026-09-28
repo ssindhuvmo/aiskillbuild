@@ -5,6 +5,7 @@ import GoogleSignIn, { loadGis } from "./components/GoogleSignIn.jsx";
 import StepIndicator from "./components/StepIndicator.jsx";
 import Intake from "./pages/Intake.jsx";
 import Placeholder from "./pages/Placeholder.jsx";
+import SkillGaps from "./pages/SkillGaps.jsx";
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = checking session, null = signed out
@@ -64,7 +65,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/intake" replace />} />
         <Route path="/intake" element={<Intake />} />
-        <Route path="/gaps" element={<Placeholder title="Skill Gaps" />} />
+        <Route path="/gaps" element={<SkillGaps />} />
         <Route path="/resources" element={<Placeholder title="Resources" />} />
         <Route path="/roadmap" element={<Placeholder title="Roadmap" />} />
       </Routes>

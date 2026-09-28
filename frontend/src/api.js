@@ -41,6 +41,10 @@ export const getDomains = () => request("/api/domains");
 export const updateProfile = (fields) => request("/api/profile", json("PUT", fields));
 export const confirmProfile = () => request("/api/profile/confirm", json("POST"));
 
+export const getGaps = () => request("/api/gaps");
+export const analyzeGaps = (corrections) => request("/api/gaps/analyze", json("POST", { corrections }));
+export const confirmGaps = () => request("/api/gaps/confirm", json("POST"));
+
 // Streams the reply over SSE. Handlers: onToken(text), onState(profile), onError(msg).
 export async function streamChat(message, { onToken, onState, onError }) {
   let res;

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.routes import auth, intake
+from app.routes import auth, gaps, intake
 from core.config import FRONTEND_ORIGIN, SESSION_COOKIE_SECURE, SESSION_MAX_AGE, SESSION_SECRET
 from core.db import init_db
 
@@ -35,3 +35,4 @@ app.add_middleware(
 )
 app.include_router(auth.router)
 app.include_router(intake.router)
+app.include_router(gaps.router)
