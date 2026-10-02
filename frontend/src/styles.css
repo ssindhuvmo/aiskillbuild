@@ -67,3 +67,11 @@ button.link:disabled { color:var(--muted); opacity:1; }
 @keyframes slide { from { transform:translateX(-100%); } to { transform:translateX(290%); } }
 @media (prefers-reduced-motion: reduce) { .bar span { animation:none; width:100%; opacity:.4; } }
 .choice strong { color:var(--accent); } .choice span { font-size:13px; color:var(--muted); }
+h2.inline { margin:0; }
+.resources { margin-top:10px; }
+.resources li { padding:12px 0; }
+.resource a { color:var(--accent); text-decoration:none; } .resource a:hover { text-decoration:underline; }
+.resource .skill-head + .skill-head { margin-top:4px; }
+.tag.free { background:#dcf5e7; color:var(--ok); } .tag.paid { background:#fff3d6; color:#8a5a00; }
+.tag.fmt-project { background:#e6e8ff; color:var(--accent); }
+.why { font-style:italic; }

@@ -165,7 +165,7 @@ Build one milestone at a time and stop after each so it can be tested.
 4. Knowledge base + ranking: seed JSON knowledge base, retrieval layer and ranking
    function, Resources page with the ranked list (flow step 4a). Retrieval and
    ranking stay plain, reusable Python functions so milestone 5 can wrap them as
-   graph nodes
+   graph nodes — done
 5. Live web search + conversational refinement (flow steps 4b–5). Introduces
    LangGraph: the course search / refinement graph with URL verification,
    pause/resume refinement and approval

@@ -1,0 +1,491 @@
+{
+  "tags": {
+    "python": ["python", "python for ml", "python programming", "numpy"],
+    "sql": ["sql", "relational databases", "querying data"],
+    "data-wrangling": ["pandas", "data wrangling", "data cleaning", "data preprocessing", "data preparation", "data manipulation", "data pipelines"],
+    "statistics": ["statistics", "statistical", "probability", "hypothesis testing", "a b testing", "experimentation", "linear algebra", "math for ml", "mathematics"],
+    "machine-learning": ["machine learning", "ml", "supervised learning", "unsupervised learning", "classical ml", "scikit learn", "sklearn", "classification", "predictive modeling", "predictive modelling", "model training"],
+    "regression": ["regression", "linear models"],
+    "feature-engineering": ["feature engineering", "features", "feature selection"],
+    "evaluation": ["model evaluation", "evaluation", "evals", "metrics", "validation", "cross validation", "llm evaluation"],
+    "deep-learning": ["deep learning", "neural networks", "neural network", "backpropagation", "dl"],
+    "pytorch": ["pytorch", "torch"],
+    "tensorflow": ["tensorflow", "keras"],
+    "nlp": ["nlp", "natural language processing", "text classification", "text mining", "language models"],
+    "transformers": ["transformers", "transformer", "attention", "bert", "hugging face", "huggingface", "fine tuning", "fine-tuning"],
+    "llm": ["llm", "llms", "large language model", "large language models", "generative ai", "genai", "gpt", "claude", "foundation models"],
+    "prompt-engineering": ["prompt engineering", "prompting", "prompt design", "prompts"],
+    "rag": ["rag", "retrieval augmented generation", "retrieval-augmented generation", "vector database", "vector databases", "vector search", "embeddings", "semantic search"],
+    "ai-agents": ["agents", "ai agents", "agentic", "tool use", "function calling", "multi agent", "langgraph", "langchain"],
+    "mlops": ["mlops", "ml ops", "model deployment", "deployment", "model serving", "monitoring", "ci cd", "experiment tracking", "model monitoring", "productionizing", "production ml", "ml pipelines", "docker", "kubernetes", "cloud"],
+    "ml-system-design": ["ml system design", "system design", "ml systems", "machine learning systems", "ml engineering", "architecture"],
+    "time-series": ["time series", "time-series", "sequential data"],
+    "forecasting": ["forecasting", "demand forecasting", "demand planning", "sales forecasting"],
+    "computer-vision": ["computer vision", "image classification", "cnn", "cnns", "convolutional", "object detection", "vision"],
+    "recommender-systems": ["recommender", "recommender systems", "recommendation", "recommendations", "recommendation systems", "personalization", "collaborative filtering"],
+    "responsible-ai": ["responsible ai", "ai ethics", "fairness", "bias", "explainability", "interpretability", "model risk", "ai governance", "ai risk"],
+    "imbalanced-data": ["imbalanced", "class imbalance", "anomaly detection", "outlier detection", "rare events"],
+    "compliance": ["compliance", "regulation", "regulations", "regulatory", "privacy", "data privacy", "data protection", "gdpr"],
+    "fraud-detection": ["fraud", "fraud detection", "anti money laundering", "aml", "transaction monitoring"],
+    "credit-risk": ["credit risk", "credit scoring", "default prediction", "underwriting", "lending", "risk modeling", "risk modelling"],
+    "pci-dss": ["pci dss", "pci", "payment card", "cardholder data", "payments security"],
+    "clinical-data": ["clinical data", "ehr", "electronic health records", "health records", "healthcare data", "patient data", "fhir", "hl7"],
+    "clinical-nlp": ["clinical nlp", "clinical notes", "medical nlp", "biomedical nlp", "medical text"],
+    "medical-imaging": ["medical imaging", "radiology", "x ray", "x-ray", "mri", "ct scans", "medical images"],
+    "hipaa": ["hipaa", "phi", "protected health information", "health privacy"],
+    "personalized-learning": ["personalized learning", "adaptive learning", "knowledge tracing", "student modeling", "student modelling", "learner modeling", "intelligent tutoring"],
+    "learning-analytics": ["learning analytics", "educational data", "education data", "student data", "dropout prediction", "student performance", "edtech data"],
+    "ferpa": ["ferpa", "student privacy", "coppa"],
+    "property-valuation": ["property valuation", "house price", "house prices", "home valuation", "automated valuation", "avm", "real estate pricing", "real estate data", "property data", "geospatial"],
+    "fair-housing": ["fair housing", "fair lending", "ecoa", "disparate impact"]
+  },
+  "broad_tags": ["machine-learning", "compliance"],
+  "resources": [
+    {
+      "id": "kaggle-python",
+      "title": "Python",
+      "provider": "Kaggle Learn",
+      "url": "https://www.kaggle.com/learn/python",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 5,
+      "skills": ["python"], "domains": [],
+      "description": "Short, hands-on intro to Python syntax, functions, lists and loops in browser notebooks."
+    },
+    {
+      "id": "kaggle-pandas",
+      "title": "Pandas",
+      "provider": "Kaggle Learn",
+      "url": "https://www.kaggle.com/learn/pandas",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 4,
+      "skills": ["data-wrangling", "python"], "domains": [],
+      "description": "Load, select, group and clean tabular data with pandas — the daily tool of any ML practitioner."
+    },
+    {
+      "id": "kaggle-sql",
+      "title": "Intro to SQL",
+      "provider": "Kaggle Learn",
+      "url": "https://www.kaggle.com/learn/intro-to-sql",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 3,
+      "skills": ["sql"], "domains": [],
+      "description": "Query real public datasets with SQL: SELECT, GROUP BY, joins and aggregations."
+    },
+    {
+      "id": "khan-statistics",
+      "title": "Statistics and Probability",
+      "provider": "Khan Academy",
+      "url": "https://www.khanacademy.org/math/statistics-probability",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 40,
+      "skills": ["statistics"], "domains": [],
+      "description": "Self-paced statistics from descriptive stats to probability, inference and regression."
+    },
+    {
+      "id": "islp",
+      "title": "An Introduction to Statistical Learning (with Python)",
+      "provider": "James, Witten, Hastie, Tibshirani & Taylor",
+      "url": "https://www.statlearning.com/",
+      "format": "book", "level": "intermediate", "cost": "free", "hours": 50,
+      "skills": ["statistics", "machine-learning", "regression", "evaluation"], "domains": [],
+      "description": "The classic free textbook on the statistics behind ML, with Python labs for every chapter."
+    },
+    {
+      "id": "google-mlcc",
+      "title": "Machine Learning Crash Course",
+      "provider": "Google",
+      "url": "https://developers.google.com/machine-learning/crash-course",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 15,
+      "skills": ["machine-learning", "regression", "evaluation", "feature-engineering", "responsible-ai"], "domains": [],
+      "description": "Fast-paced intro to core ML concepts with interactive visualizations and exercises."
+    },
+    {
+      "id": "kaggle-intro-ml",
+      "title": "Intro to Machine Learning",
+      "provider": "Kaggle Learn",
+      "url": "https://www.kaggle.com/learn/intro-to-machine-learning",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 3,
+      "skills": ["machine-learning", "evaluation"], "domains": [],
+      "description": "Build and validate your first models with scikit-learn in a few hours."
+    },
+    {
+      "id": "coursera-ml-specialization",
+      "title": "Machine Learning Specialization",
+      "provider": "DeepLearning.AI & Stanford (Coursera)",
+      "url": "https://www.coursera.org/specializations/machine-learning-introduction",
+      "format": "course", "level": "beginner", "cost": "paid", "hours": 90,
+      "skills": ["machine-learning", "regression", "deep-learning", "recommender-systems"], "domains": [],
+      "description": "Andrew Ng's foundational ML program: supervised, unsupervised learning and recommenders, with certificate."
+    },
+    {
+      "id": "kaggle-titanic",
+      "title": "Titanic — Machine Learning from Disaster",
+      "provider": "Kaggle",
+      "url": "https://www.kaggle.com/competitions/titanic",
+      "format": "project", "level": "beginner", "cost": "free", "hours": 8,
+      "skills": ["machine-learning", "feature-engineering", "data-wrangling"], "domains": [],
+      "description": "The standard first end-to-end ML project: clean data, engineer features, train and submit."
+    },
+    {
+      "id": "kaggle-feature-engineering",
+      "title": "Feature Engineering",
+      "provider": "Kaggle Learn",
+      "url": "https://www.kaggle.com/learn/feature-engineering",
+      "format": "course", "level": "intermediate", "cost": "free", "hours": 5,
+      "skills": ["feature-engineering", "machine-learning"], "domains": [],
+      "description": "Mutual information, target encoding, clustering and PCA features to improve tabular models."
+    },
+    {
+      "id": "handson-ml3",
+      "title": "Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow (3rd ed.)",
+      "provider": "Aurélien Géron (O'Reilly)",
+      "url": "https://www.oreilly.com/library/view/hands-on-machine-learning/9781098125967/",
+      "format": "book", "level": "intermediate", "cost": "paid", "hours": 60,
+      "skills": ["machine-learning", "deep-learning", "tensorflow", "evaluation"], "domains": [],
+      "description": "Practical, code-first book covering the full ML toolkit from linear models to deep nets."
+    },
+    {
+      "id": "fastai-practical-dl",
+      "title": "Practical Deep Learning for Coders",
+      "provider": "fast.ai",
+      "url": "https://course.fast.ai/",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 60,
+      "skills": ["deep-learning", "pytorch", "computer-vision", "nlp"], "domains": [],
+      "description": "Top-down deep learning course for people who can code: train real models from lesson one."
+    },
+    {
+      "id": "coursera-dl-specialization",
+      "title": "Deep Learning Specialization",
+      "provider": "DeepLearning.AI (Coursera)",
+      "url": "https://www.coursera.org/specializations/deep-learning",
+      "format": "course", "level": "intermediate", "cost": "paid", "hours": 120,
+      "skills": ["deep-learning", "computer-vision", "nlp", "tensorflow"], "domains": [],
+      "description": "Five-course program on neural networks, tuning, CNNs and sequence models, with certificate."
+    },
+    {
+      "id": "pytorch-basics",
+      "title": "Learn the Basics (PyTorch tutorials)",
+      "provider": "PyTorch",
+      "url": "https://pytorch.org/tutorials/beginner/basics/intro.html",
+      "format": "tutorial", "level": "beginner", "cost": "free", "hours": 6,
+      "skills": ["pytorch", "deep-learning"], "domains": [],
+      "description": "Official step-by-step tutorial: tensors, datasets, models, autograd, training loops and saving."
+    },
+    {
+      "id": "karpathy-zero-to-hero",
+      "title": "Neural Networks: Zero to Hero",
+      "provider": "Andrej Karpathy",
+      "url": "https://karpathy.ai/zero-to-hero.html",
+      "format": "course", "level": "intermediate", "cost": "free", "hours": 25,
+      "skills": ["deep-learning", "transformers", "llm", "pytorch"], "domains": [],
+      "description": "Build neural nets and a GPT from scratch in code, from backprop up to transformers."
+    },
+    {
+      "id": "hf-llm-course",
+      "title": "LLM Course",
+      "provider": "Hugging Face",
+      "url": "https://huggingface.co/learn/llm-course",
+      "format": "course", "level": "intermediate", "cost": "free", "hours": 30,
+      "skills": ["transformers", "nlp", "llm"], "domains": [],
+      "description": "Use, fine-tune and share transformer models with the Hugging Face ecosystem."
+    },
+    {
+      "id": "attention-paper",
+      "title": "Attention Is All You Need",
+      "provider": "Vaswani et al. (arXiv)",
+      "url": "https://arxiv.org/abs/1706.03762",
+      "format": "paper", "level": "advanced", "cost": "free", "hours": 4,
+      "skills": ["transformers", "nlp", "deep-learning"], "domains": [],
+      "description": "The paper that introduced the transformer architecture behind every modern LLM."
+    },
+    {
+      "id": "dlai-prompt-engineering",
+      "title": "ChatGPT Prompt Engineering for Developers",
+      "provider": "DeepLearning.AI",
+      "url": "https://www.deeplearning.ai/short-courses/chatgpt-prompt-engineering-for-developers/",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 2,
+      "skills": ["prompt-engineering", "llm"], "domains": [],
+      "description": "One-hour short course on prompting principles and building simple LLM features in code."
+    },
+    {
+      "id": "anthropic-courses",
+      "title": "Anthropic Courses (API fundamentals, prompt engineering, tool use)",
+      "provider": "Anthropic (GitHub)",
+      "url": "https://github.com/anthropics/courses",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 12,
+      "skills": ["prompt-engineering", "llm", "ai-agents", "evaluation"], "domains": [],
+      "description": "Notebook courses on the Claude API, prompt engineering, prompt evaluations and tool use."
+    },
+    {
+      "id": "dlai-advanced-rag",
+      "title": "Building and Evaluating Advanced RAG Applications",
+      "provider": "DeepLearning.AI",
+      "url": "https://www.deeplearning.ai/short-courses/building-evaluating-advanced-rag/",
+      "format": "course", "level": "intermediate", "cost": "free", "hours": 2,
+      "skills": ["rag", "llm", "evaluation"], "domains": [],
+      "description": "Short course on sentence-window and auto-merging retrieval plus evaluating RAG quality."
+    },
+    {
+      "id": "rag-paper",
+      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "provider": "Lewis et al. (arXiv)",
+      "url": "https://arxiv.org/abs/2005.11401",
+      "format": "paper", "level": "advanced", "cost": "free", "hours": 3,
+      "skills": ["rag", "nlp", "llm"], "domains": [],
+      "description": "The original RAG paper: combining a retriever with a generator for grounded answers."
+    },
+    {
+      "id": "hf-agents-course",
+      "title": "AI Agents Course",
+      "provider": "Hugging Face",
+      "url": "https://huggingface.co/learn/agents-course",
+      "format": "course", "level": "intermediate", "cost": "free", "hours": 20,
+      "skills": ["ai-agents", "llm"], "domains": [],
+      "description": "Build LLM agents with tools, planning and memory across popular agent frameworks."
+    },
+    {
+      "id": "made-with-ml",
+      "title": "Made With ML",
+      "provider": "Goku Mohandas",
+      "url": "https://madewithml.com/",
+      "format": "course", "level": "intermediate", "cost": "free", "hours": 40,
+      "skills": ["mlops", "ml-system-design", "evaluation"], "domains": [],
+      "description": "Design, develop, deploy and iterate on production ML with software engineering best practices."
+    },
+    {
+      "id": "mlops-zoomcamp",
+      "title": "MLOps Zoomcamp",
+      "provider": "DataTalks.Club (GitHub)",
+      "url": "https://github.com/DataTalksClub/mlops-zoomcamp",
+      "format": "project", "level": "intermediate", "cost": "free", "hours": 60,
+      "skills": ["mlops"], "domains": [],
+      "description": "Free project-based course: experiment tracking, orchestration, deployment and monitoring."
+    },
+    {
+      "id": "designing-ml-systems",
+      "title": "Designing Machine Learning Systems",
+      "provider": "Chip Huyen (O'Reilly)",
+      "url": "https://www.oreilly.com/library/view/designing-machine-learning-systems/9781098107956/",
+      "format": "book", "level": "intermediate", "cost": "paid", "hours": 25,
+      "skills": ["ml-system-design", "mlops", "feature-engineering"], "domains": [],
+      "description": "How to design reliable, scalable ML systems end to end, from data to monitoring."
+    },
+    {
+      "id": "kaggle-time-series",
+      "title": "Time Series",
+      "provider": "Kaggle Learn",
+      "url": "https://www.kaggle.com/learn/time-series",
+      "format": "course", "level": "intermediate", "cost": "free", "hours": 5,
+      "skills": ["time-series", "forecasting"], "domains": [],
+      "description": "Trend, seasonality, lag features and hybrid models for forecasting with ML."
+    },
+    {
+      "id": "nist-ai-rmf",
+      "title": "AI Risk Management Framework",
+      "provider": "NIST",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+      "format": "paper", "level": "intermediate", "cost": "free", "hours": 5,
+      "skills": ["responsible-ai", "compliance"], "domains": [],
+      "description": "The US reference framework for identifying and managing risks of AI systems."
+    },
+
+    {
+      "id": "fraud-handbook",
+      "title": "Reproducible Machine Learning for Credit Card Fraud Detection — Practical Handbook",
+      "provider": "Le Borgne et al. (ULB)",
+      "url": "https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html",
+      "format": "book", "level": "intermediate", "cost": "free", "hours": 20,
+      "skills": ["fraud-detection", "imbalanced-data", "evaluation", "feature-engineering"], "domains": ["FinTech"],
+      "description": "Free handbook with runnable notebooks on fraud detection: features, imbalance and proper evaluation."
+    },
+    {
+      "id": "kaggle-creditcard-fraud",
+      "title": "Credit Card Fraud Detection dataset",
+      "provider": "Kaggle (ULB Machine Learning Group)",
+      "url": "https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud",
+      "format": "project", "level": "beginner", "cost": "free", "hours": 10,
+      "skills": ["fraud-detection", "imbalanced-data", "machine-learning"], "domains": ["FinTech"],
+      "description": "Real anonymized card transactions with 0.17% fraud — a classic imbalanced-classification project."
+    },
+    {
+      "id": "kaggle-ieee-fraud",
+      "title": "IEEE-CIS Fraud Detection",
+      "provider": "Kaggle",
+      "url": "https://www.kaggle.com/competitions/ieee-fraud-detection",
+      "format": "project", "level": "intermediate", "cost": "free", "hours": 25,
+      "skills": ["fraud-detection", "feature-engineering", "imbalanced-data"], "domains": ["FinTech"],
+      "description": "Large e-commerce payments dataset; learn from top solutions' feature engineering."
+    },
+    {
+      "id": "kaggle-home-credit",
+      "title": "Home Credit Default Risk",
+      "provider": "Kaggle",
+      "url": "https://www.kaggle.com/competitions/home-credit-default-risk",
+      "format": "project", "level": "intermediate", "cost": "free", "hours": 30,
+      "skills": ["credit-risk", "feature-engineering", "machine-learning"], "domains": ["FinTech"],
+      "description": "Predict loan default from application, bureau and payment history — realistic credit-risk modeling."
+    },
+    {
+      "id": "pci-dss-library",
+      "title": "PCI DSS Document Library",
+      "provider": "PCI Security Standards Council",
+      "url": "https://www.pcisecuritystandards.org/document_library/",
+      "format": "paper", "level": "intermediate", "cost": "free", "hours": 6,
+      "skills": ["pci-dss", "compliance"], "domains": ["FinTech"],
+      "description": "The official PCI DSS standard and guidance on protecting cardholder data in systems you build."
+    },
+
+    {
+      "id": "coursera-ai-for-medicine",
+      "title": "AI for Medicine Specialization",
+      "provider": "DeepLearning.AI (Coursera)",
+      "url": "https://www.coursera.org/specializations/ai-for-medicine",
+      "format": "course", "level": "intermediate", "cost": "paid", "hours": 60,
+      "skills": ["medical-imaging", "clinical-data", "clinical-nlp", "evaluation"], "domains": ["Healthcare"],
+      "description": "Diagnosis from images, prognosis from EHR data and treatment effects, with medical evaluation metrics."
+    },
+    {
+      "id": "nih-chest-xray",
+      "title": "NIH Chest X-rays dataset",
+      "provider": "Kaggle (NIH Clinical Center)",
+      "url": "https://www.kaggle.com/datasets/nih-chest-xrays/data",
+      "format": "project", "level": "intermediate", "cost": "free", "hours": 20,
+      "skills": ["medical-imaging", "computer-vision", "deep-learning"], "domains": ["Healthcare"],
+      "description": "112k labeled chest X-rays for a multi-label disease classification portfolio project."
+    },
+    {
+      "id": "mimic-iv",
+      "title": "MIMIC-IV clinical database",
+      "provider": "PhysioNet (MIT)",
+      "url": "https://physionet.org/content/mimiciv/",
+      "format": "project", "level": "advanced", "cost": "free", "hours": 30,
+      "skills": ["clinical-data", "hipaa", "sql"], "domains": ["Healthcare"],
+      "description": "De-identified ICU records for EHR modeling; requires free credentialing and data-use training."
+    },
+    {
+      "id": "clinical-bert-paper",
+      "title": "Publicly Available Clinical BERT Embeddings",
+      "provider": "Alsentzer et al. (arXiv)",
+      "url": "https://arxiv.org/abs/1904.03323",
+      "format": "paper", "level": "advanced", "cost": "free", "hours": 3,
+      "skills": ["clinical-nlp", "transformers", "nlp"], "domains": ["Healthcare"],
+      "description": "How domain-specific BERT models improve NLP on clinical notes."
+    },
+    {
+      "id": "hhs-hipaa",
+      "title": "HIPAA for Professionals",
+      "provider": "U.S. Department of Health & Human Services",
+      "url": "https://www.hhs.gov/hipaa/for-professionals/index.html",
+      "format": "tutorial", "level": "beginner", "cost": "free", "hours": 4,
+      "skills": ["hipaa", "compliance"], "domains": ["Healthcare"],
+      "description": "Official guidance on the Privacy and Security Rules and de-identification of health data."
+    },
+
+    {
+      "id": "kaggle-riiid",
+      "title": "Riiid Answer Correctness Prediction",
+      "provider": "Kaggle",
+      "url": "https://www.kaggle.com/competitions/riiid-test-answer-prediction",
+      "format": "project", "level": "intermediate", "cost": "free", "hours": 25,
+      "skills": ["personalized-learning", "learning-analytics", "machine-learning"], "domains": ["EdTech"],
+      "description": "Knowledge-tracing project on 100M student interactions from a real tutoring app."
+    },
+    {
+      "id": "dkt-paper",
+      "title": "Deep Knowledge Tracing",
+      "provider": "Piech et al. (arXiv)",
+      "url": "https://arxiv.org/abs/1506.05908",
+      "format": "paper", "level": "advanced", "cost": "free", "hours": 3,
+      "skills": ["personalized-learning", "deep-learning"], "domains": ["EdTech"],
+      "description": "Seminal paper using recurrent networks to model student knowledge for adaptive learning."
+    },
+    {
+      "id": "oulad",
+      "title": "Open University Learning Analytics Dataset (OULAD)",
+      "provider": "The Open University",
+      "url": "https://analyse.kmi.open.ac.uk/open-dataset",
+      "format": "project", "level": "beginner", "cost": "free", "hours": 15,
+      "skills": ["learning-analytics", "machine-learning", "data-wrangling"], "domains": ["EdTech"],
+      "description": "Anonymized student demographics and VLE activity — predict dropout and student performance."
+    },
+    {
+      "id": "ferpa-guide",
+      "title": "FERPA — Family Educational Rights and Privacy Act",
+      "provider": "U.S. Department of Education",
+      "url": "https://studentprivacy.ed.gov/ferpa",
+      "format": "tutorial", "level": "beginner", "cost": "free", "hours": 2,
+      "skills": ["ferpa", "compliance"], "domains": ["EdTech"],
+      "description": "Official text and guidance on handling student education records."
+    },
+
+    {
+      "id": "kaggle-m5",
+      "title": "M5 Forecasting — Accuracy",
+      "provider": "Kaggle",
+      "url": "https://www.kaggle.com/competitions/m5-forecasting-accuracy",
+      "format": "project", "level": "intermediate", "cost": "free", "hours": 30,
+      "skills": ["forecasting", "time-series", "feature-engineering"], "domains": ["Retail"],
+      "description": "Forecast daily Walmart unit sales across stores and products — hierarchical demand forecasting."
+    },
+    {
+      "id": "fpp3",
+      "title": "Forecasting: Principles and Practice (3rd ed.)",
+      "provider": "Hyndman & Athanasopoulos (OTexts)",
+      "url": "https://otexts.com/fpp3/",
+      "format": "book", "level": "intermediate", "cost": "free", "hours": 40,
+      "skills": ["forecasting", "time-series", "statistics"], "domains": [],
+      "description": "The standard free textbook on forecasting methods, widely used for demand planning."
+    },
+    {
+      "id": "kaggle-hm-recsys",
+      "title": "H&M Personalized Fashion Recommendations",
+      "provider": "Kaggle",
+      "url": "https://www.kaggle.com/competitions/h-and-m-personalized-fashion-recommendations",
+      "format": "project", "level": "intermediate", "cost": "free", "hours": 25,
+      "skills": ["recommender-systems", "feature-engineering"], "domains": ["Retail"],
+      "description": "Recommend products from real retail transactions, customer and article data."
+    },
+    {
+      "id": "google-recsys",
+      "title": "Recommendation Systems",
+      "provider": "Google",
+      "url": "https://developers.google.com/machine-learning/recommendation",
+      "format": "course", "level": "beginner", "cost": "free", "hours": 4,
+      "skills": ["recommender-systems", "machine-learning"], "domains": ["Retail"],
+      "description": "Candidate generation, scoring and re-ranking — how production recommenders are built."
+    },
+
+    {
+      "id": "kaggle-house-prices",
+      "title": "House Prices — Advanced Regression Techniques",
+      "provider": "Kaggle",
+      "url": "https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques",
+      "format": "project", "level": "beginner", "cost": "free", "hours": 12,
+      "skills": ["property-valuation", "regression", "feature-engineering"], "domains": ["Real Estate"],
+      "description": "Predict sale prices from 79 house features — a hands-on intro to property valuation models."
+    },
+    {
+      "id": "kaggle-zillow",
+      "title": "Zillow Prize: Zillow's Home Value Prediction (Zestimate)",
+      "provider": "Kaggle",
+      "url": "https://www.kaggle.com/competitions/zillow-prize-1",
+      "format": "project", "level": "intermediate", "cost": "free", "hours": 25,
+      "skills": ["property-valuation", "regression", "machine-learning"], "domains": ["Real Estate"],
+      "description": "Improve an automated valuation model by predicting the error of Zillow's Zestimate."
+    },
+    {
+      "id": "handson-housing-notebook",
+      "title": "End-to-End ML Project: California Housing (notebook)",
+      "provider": "Aurélien Géron (GitHub)",
+      "url": "https://github.com/ageron/handson-ml3/blob/main/02_end_to_end_machine_learning_project.ipynb",
+      "format": "tutorial", "level": "beginner", "cost": "free", "hours": 6,
+      "skills": ["property-valuation", "machine-learning", "data-wrangling"], "domains": ["Real Estate"],
+      "description": "Walk through a full house-price model: framing, data prep, training and evaluation."
+    },
+    {
+      "id": "fair-housing-act",
+      "title": "The Fair Housing Act",
+      "provider": "U.S. Department of Justice",
+      "url": "https://www.justice.gov/crt/fair-housing-act-1",
+      "format": "tutorial", "level": "beginner", "cost": "free", "hours": 2,
+      "skills": ["fair-housing", "compliance", "responsible-ai"], "domains": ["Real Estate"],
+      "description": "What the law prohibits — essential context for avoiding discriminatory pricing or screening models."
+    }
+  ]
+}

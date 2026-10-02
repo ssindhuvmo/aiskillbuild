@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from core.agents.course_search.schemas import ResourceList
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis
 
 
@@ -60,3 +61,11 @@ class GapState(BaseModel):
 
 class AnalyzeIn(BaseModel):
     corrections: list[Correction] = []
+
+
+class ResourceState(BaseModel):
+    status: Literal["none", "ready"]
+    profile: ProfileOut
+    gaps_confirmed: bool = False  # a search needs a confirmed, up-to-date gap analysis
+    resources: ResourceList | None = None
+    stale: bool = False  # the gap analysis or profile changed since this list was built

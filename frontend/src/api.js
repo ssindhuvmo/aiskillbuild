@@ -45,6 +45,9 @@ export const getGaps = () => request("/api/gaps");
 export const analyzeGaps = (corrections) => request("/api/gaps/analyze", json("POST", { corrections }));
 export const confirmGaps = () => request("/api/gaps/confirm", json("POST"));
 
+export const getResources = () => request("/api/resources");
+export const searchResources = () => request("/api/resources/search", json("POST"));
+
 // Streams the reply over SSE. Handlers: onToken(text), onState(profile), onError(msg).
 export async function streamChat(message, { onToken, onState, onError }) {
   let res;

@@ -12,9 +12,12 @@ milestones; `README.md` has setup steps. Build only the current milestone.
   - `repository.py` — all DB access.
   - `auth.py` — `verify_google_token` and the `current_user` dependency.
   - `agents/<name>/` — one module per agent with its own `prompt.md`: `intake/` (streaming chat with a
-    `record_profile` tool) and `gap_analysis/` (one structured-output call). `llm.py` — Anthropic client and
-    `friendly_error`.
+    `record_profile` tool), `gap_analysis/` (one structured-output call) and `course_search/` (no LLM yet, so
+    no prompt until milestone 5). `llm.py` — Anthropic client and `friendly_error`.
+  - `knowledge/` — the knowledge base (`store.py`) and the retrieval layer (`retriever.py`).
 - `backend/config/domains.json` — supported domains (edit here, not in code).
+- `backend/data/knowledge_base.json` — curated resources + skill-tag vocabulary (edit here, not in code).
+- `backend/scripts/check_kb_links.py` — live check of every knowledge-base URL (network; not in pytest).
 - `frontend/src/` — `App.jsx` (auth gate, header, routes), `api.js` (all fetch calls), `pages/`, `components/`.
 
 ## Milestones
@@ -56,6 +59,24 @@ refinement (LangGraph), 6 scheduler + roadmap. Build one at a time and stop for 
   un-confirms the analysis and clears `Profile.inferred_skills` (set to the strengths on confirm).
 - Analysis requires a confirmed profile (409 otherwise). It's a blocking request (20–40 s); the page shows
   rotating progress messages.
+
+## Knowledge base + ranking (Milestone 4)
+- `Retriever` protocol (`core/knowledge/retriever.py`): `search(gap, profile, limit) -> list[Candidate]`, where
+  `Candidate.match_score` (0–1) is the only relevance signal ranking uses. `TagRetriever` maps the gap's skill
+  name (fallback: `why_needed`) to vocabulary tags by whole-word alias match and scores the weighted share of
+  those tags a resource covers (`broad_tags` count half; the denominator is at least 1; +0.2 for the user's domain
+  on domain-specific gaps). `get_retriever()` is the only swap point for a future vector retriever (local
+  embeddings + sqlite-vec); ranking, API and UI must not change for that.
+- `course_search/ranking.py` (pure): score = 0.45 relevance + 0.20 level fit + 0.20 domain fit + 0.15 time fit
+  (`WEIGHTS`); `diversify` penalizes repeated formats/costs to mix courses/papers/projects and free/paid.
+- `course_search/search.py`: `retrieve` → `merge_dedupe` (by URL) → `rank` → `present` (gaps by priority, ≤ 4
+  each, drops score < `MIN_SCORE` or relevance < `MIN_RELEVANCE`, a resource shown once under its best gap with
+  `also_covers`). `find_resources` chains them; milestone 5 wraps these as graph nodes (web search before
+  `merge_dedupe`, URL verification before `rank`).
+- `resource_lists` table (one row per user) with a `snapshot` of the gap analysis + search profile; `stale` =
+  snapshot differs or gaps no longer confirmed. Search needs confirmed, current gaps (409 otherwise). Every run
+  is logged to `agent_outputs` as `course_search`.
+- Knowledge-base URLs must be real: run `scripts/check_kb_links.py` after editing the file.
 
 ## Conventions
 - Secrets live only in `backend/.env`; `frontend/.env` holds only `VITE_GOOGLE_CLIENT_ID`. Both are gitignored;

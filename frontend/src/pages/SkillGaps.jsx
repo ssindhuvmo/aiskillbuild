@@ -250,7 +250,7 @@ export default function SkillGaps() {
         </div>
         {changed && <p className="muted">Update the analysis to apply your corrections before confirming.</p>}
         {state.confirmed && (
-          <p className="ok">Skills confirmed. Resource search arrives in the next milestone.</p>
+          <p className="ok">Skills confirmed. See your <Link to="/resources">learning resources</Link>.</p>
         )}
       </section>
     </main>

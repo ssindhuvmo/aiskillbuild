@@ -63,3 +63,13 @@ class GapAnalysisRecord(Base):
     profile_snapshot: Mapped[dict] = mapped_column(JSON)  # the five inputs it was based on
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class ResourceListRecord(Base):
+    """The user's current ranked resource list (every run is also logged in agent_outputs)."""
+
+    __tablename__ = "resource_lists"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    items: Mapped[dict] = mapped_column(JSON)  # ResourceList
+    snapshot: Mapped[dict] = mapped_column(JSON)  # {"analysis": GapAnalysis, "profile": SearchProfile} it was built from
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)

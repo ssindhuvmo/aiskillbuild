@@ -28,6 +28,9 @@ if not GOOGLE_CLIENT_ID or not SESSION_SECRET or SESSION_SECRET == "change-me":
     )
 
 
+KB_PATH = BACKEND_DIR / "data" / "knowledge_base.json"
+
+
 def load_domains() -> list[str]:
     with open(BACKEND_DIR / "config" / "domains.json", encoding="utf-8") as f:
         return json.load(f)["domains"]

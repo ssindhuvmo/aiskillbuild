@@ -5,6 +5,7 @@ import GoogleSignIn, { loadGis } from "./components/GoogleSignIn.jsx";
 import StepIndicator from "./components/StepIndicator.jsx";
 import Intake from "./pages/Intake.jsx";
 import Placeholder from "./pages/Placeholder.jsx";
+import Resources from "./pages/Resources.jsx";
 import SkillGaps from "./pages/SkillGaps.jsx";
 
 export default function App() {
@@ -66,7 +67,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/intake" replace />} />
         <Route path="/intake" element={<Intake />} />
         <Route path="/gaps" element={<SkillGaps />} />
-        <Route path="/resources" element={<Placeholder title="Resources" />} />
+        <Route path="/resources" element={<Resources />} />
         <Route path="/roadmap" element={<Placeholder title="Roadmap" />} />
       </Routes>
     </div>

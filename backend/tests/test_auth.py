@@ -17,6 +17,8 @@ PROTECTED = [
     ("get", "/api/gaps", None),
     ("post", "/api/gaps/analyze", {}),
     ("post", "/api/gaps/confirm", None),
+    ("get", "/api/resources", None),
+    ("post", "/api/resources/search", None),
 ]
 
 

@@ -1,10 +1,12 @@
 """All database access lives here so routes stay free of business logic."""
 from sqlalchemy.orm import Session
 
+from core.agents.course_search.schemas import ResourceList
 from core.agents.intake.validation import FIELDS, missing_fields, validate_field
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis
-from core.models import AgentOutput, Conversation, GapAnalysisRecord, Profile, User, _now
-from core.schemas import ChatMessage, GapState, ProfileOut, ProfileUpdate
+from core.knowledge.schemas import SearchProfile
+from core.models import AgentOutput, Conversation, GapAnalysisRecord, Profile, ResourceListRecord, User, _now
+from core.schemas import ChatMessage, GapState, ProfileOut, ProfileUpdate, ResourceState
 
 
 class ValidationFailed(Exception):
@@ -172,3 +174,53 @@ def confirm_gaps(db: Session, user_id: str) -> GapState:
     _ensure_profile(db, user_id).inferred_skills = {"strengths": [s.model_dump() for s in state.analysis.strengths]}
     db.commit()
     return get_gap_state(db, user_id)
+
+
+# --- Resources (course search) ------------------------------------------------------
+
+
+def search_profile(profile: ProfileOut) -> SearchProfile:
+    return SearchProfile(
+        ai_experience=profile.ai_experience, domain=profile.domain, hours_per_week=profile.hours_per_week
+    )
+
+
+def _gaps_ready(gap_state: GapState) -> bool:
+    return gap_state.status == "ready" and gap_state.confirmed and not gap_state.stale
+
+
+def _resource_snapshot(gap_state: GapState) -> dict:
+    """The inputs a resource list depends on; the list is stale when these change."""
+    return {
+        "analysis": gap_state.analysis.model_dump(mode="json") if gap_state.analysis else None,
+        "profile": search_profile(gap_state.profile).model_dump() if gap_state.profile.confirmed else None,
+    }
+
+
+def get_resource_state(db: Session, user_id: str) -> ResourceState:
+    gap_state = get_gap_state(db, user_id)
+    ready = _gaps_ready(gap_state)
+    record = db.get(ResourceListRecord, user_id)
+    if record is None:
+        return ResourceState(status="none", profile=gap_state.profile, gaps_confirmed=ready)
+    return ResourceState(
+        status="ready",
+        profile=gap_state.profile,
+        gaps_confirmed=ready,
+        resources=ResourceList.model_validate(record.items),
+        stale=not ready or record.snapshot != _resource_snapshot(gap_state),
+    )
+
+
+def save_resource_list(db: Session, user_id: str, resources: ResourceList, gap_state: GapState) -> ResourceState:
+    items = resources.model_dump(mode="json")
+    snapshot = _resource_snapshot(gap_state)
+    record = db.get(ResourceListRecord, user_id)
+    if record is None:
+        record = ResourceListRecord(user_id=user_id)
+        db.add(record)
+    record.items = items
+    record.snapshot = snapshot
+    db.add(AgentOutput(user_id=user_id, agent="course_search", output={"input": snapshot, "resources": items}))
+    db.commit()
+    return get_resource_state(db, user_id)
