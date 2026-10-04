@@ -1,5 +1,5 @@
 """Course search agent entry point. Milestone 4: knowledge base only (no LLM calls).
-Milestone 5 replaces the body of run_for_user with the LangGraph graph."""
+Milestone 6 replaces the body of run_for_user with the LangGraph graph."""
 from sqlalchemy.orm import Session
 
 from core import repository

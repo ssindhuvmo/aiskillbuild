@@ -19,6 +19,11 @@ PROTECTED = [
     ("post", "/api/gaps/confirm", None),
     ("get", "/api/resources", None),
     ("post", "/api/resources/search", None),
+    ("post", "/api/resources/approve", {"resource_ids": ["x"]}),
+    ("get", "/api/roadmap", None),
+    ("post", "/api/roadmap/generate", None),
+    ("get", "/api/roadmap/export.md", None),
+    ("delete", "/api/account/data", None),
 ]
 
 

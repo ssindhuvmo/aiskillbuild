@@ -4,7 +4,7 @@ const STEPS = [
   { to: "/intake", label: "Intake", ready: true },
   { to: "/gaps", label: "Skill Gaps", ready: true },
   { to: "/resources", label: "Resources", ready: true },
-  { to: "/roadmap", label: "Roadmap" },
+  { to: "/roadmap", label: "Roadmap", ready: true },
 ];
 
 export default function StepIndicator() {

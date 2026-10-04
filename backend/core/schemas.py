@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from core.agents.course_search.schemas import ResourceList
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis
+from core.agents.scheduler.schemas import Roadmap
 
 
 class UserOut(BaseModel):
@@ -69,3 +70,17 @@ class ResourceState(BaseModel):
     gaps_confirmed: bool = False  # a search needs a confirmed, up-to-date gap analysis
     resources: ResourceList | None = None
     stale: bool = False  # the gap analysis or profile changed since this list was built
+    approved_ids: list[str] | None = None  # resource ids in the approved list; None = nothing approved yet
+    approval_stale: bool = False  # the list changed since it was approved
+
+
+class ApproveIn(BaseModel):
+    resource_ids: list[str]
+
+
+class RoadmapState(BaseModel):
+    status: Literal["none", "ready"]
+    profile: ProfileOut
+    list_approved: bool = False  # a roadmap needs an approved, up-to-date resource list
+    roadmap: Roadmap | None = None
+    stale: bool = False  # the approved list or profile changed since this roadmap was built

@@ -1,18 +1,27 @@
 """All database access lives here so routes stay free of business logic."""
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from core.agents.course_search.schemas import ResourceList
+from core.agents.course_search.schemas import ApprovedList, ApprovedResource, ResourceList
 from core.agents.intake.validation import FIELDS, missing_fields, validate_field
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis
+from core.agents.scheduler.schemas import Roadmap
 from core.knowledge.schemas import SearchProfile
-from core.models import AgentOutput, Conversation, GapAnalysisRecord, Profile, ResourceListRecord, User, _now
-from core.schemas import ChatMessage, GapState, ProfileOut, ProfileUpdate, ResourceState
+from core.models import (
+    AgentOutput, ApprovedListRecord, Conversation, GapAnalysisRecord, Profile, ResourceListRecord, RoadmapRecord,
+    User, _now,
+)
+from core.schemas import ChatMessage, GapState, ProfileOut, ProfileUpdate, ResourceState, RoadmapState
 
 
 class ValidationFailed(Exception):
     def __init__(self, errors: dict[str, str]):
         self.errors = errors
         super().__init__(str(errors))
+
+
+class NotReady(Exception):
+    """An earlier step has to be completed (or redone) first."""
 
 
 def upsert_google_user(db: Session, claims: dict) -> User:
@@ -27,6 +36,16 @@ def upsert_google_user(db: Session, claims: dict) -> User:
     user.last_login_at = _now()
     db.commit()
     return user
+
+
+def delete_user_data(db: Session, user_id: str) -> None:
+    """Start over: delete everything saved for this user. The user row stays, so the sign-in
+    keeps working. Any new table with a user_id must be added here."""
+    for model in (
+        RoadmapRecord, ApprovedListRecord, ResourceListRecord, GapAnalysisRecord, AgentOutput, Conversation, Profile,
+    ):
+        db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
+    db.commit()
 
 
 def _ensure_profile(db: Session, user_id: str) -> Profile:
@@ -131,11 +150,15 @@ def get_gap_state(db: Session, user_id: str) -> GapState:
     record = db.get(GapAnalysisRecord, user_id)
     if record is None:
         return GapState(status="none", profile=profile)
+    try:
+        analysis = GapAnalysis.model_validate(record.analysis)
+    except ValidationError:  # saved before the current limits (e.g. more than MAX_GAPS gaps): analyze again
+        return GapState(status="none", profile=profile)
     current = {f: getattr(profile, f) for f in FIELDS}
     return GapState(
         status="ready",
         profile=profile,
-        analysis=GapAnalysis.model_validate(record.analysis),
+        analysis=analysis,
         corrections=[Correction.model_validate(c) for c in record.corrections],
         confirmed=record.confirmed,
         stale=record.profile_snapshot != current,
@@ -203,12 +226,16 @@ def get_resource_state(db: Session, user_id: str) -> ResourceState:
     record = db.get(ResourceListRecord, user_id)
     if record is None:
         return ResourceState(status="none", profile=gap_state.profile, gaps_confirmed=ready)
+    snapshot = _resource_snapshot(gap_state)
+    approval = db.get(ApprovedListRecord, user_id)
     return ResourceState(
         status="ready",
         profile=gap_state.profile,
         gaps_confirmed=ready,
         resources=ResourceList.model_validate(record.items),
-        stale=not ready or record.snapshot != _resource_snapshot(gap_state),
+        stale=not ready or record.snapshot != snapshot,
+        approved_ids=[r["resource"]["id"] for r in approval.items["resources"]] if approval else None,
+        approval_stale=approval is not None and (not ready or approval.snapshot != snapshot),
     )
 
 
@@ -224,3 +251,92 @@ def save_resource_list(db: Session, user_id: str, resources: ResourceList, gap_s
     db.add(AgentOutput(user_id=user_id, agent="course_search", output={"input": snapshot, "resources": items}))
     db.commit()
     return get_resource_state(db, user_id)
+
+
+# --- Approved list ------------------------------------------------------------------
+# The contract between course search and the scheduler: whatever produces the final list
+# (the Resources page now, the refinement graph in milestone 6) calls save_approved_list,
+# and the scheduler only ever reads get_approved_list.
+
+
+def get_approved_list(db: Session, user_id: str) -> ApprovedList | None:
+    """The user's approved resources, or None if nothing is approved or the gaps or profile
+    changed since the approval."""
+    gap_state = get_gap_state(db, user_id)
+    record = db.get(ApprovedListRecord, user_id)
+    if record is None or not _gaps_ready(gap_state) or record.snapshot != _resource_snapshot(gap_state):
+        return None
+    return ApprovedList.model_validate(record.items)
+
+
+def save_approved_list(db: Session, user_id: str, approved: ApprovedList, gap_state: GapState, via: str) -> None:
+    items = approved.model_dump(mode="json")
+    record = db.get(ApprovedListRecord, user_id)
+    if record is None:
+        record = ApprovedListRecord(user_id=user_id)
+        db.add(record)
+    record.items = items
+    record.snapshot = _resource_snapshot(gap_state)
+    record.approved_via = via
+    db.add(AgentOutput(user_id=user_id, agent="resource_approval", output={"via": via, "approved": items}))
+    db.commit()
+
+
+def approve_resources(db: Session, user_id: str, resource_ids: list[str]) -> ResourceState:
+    """Approve the chosen resources from the user's saved list. Only ids are accepted, so the
+    approved resources (and their links) always come from the server's own list."""
+    state = get_resource_state(db, user_id)
+    if state.status != "ready" or state.stale:
+        raise NotReady("Build an up-to-date resource list first.")
+    chosen = set(resource_ids)
+    available = {r.resource.id for g in state.resources.gaps for r in g.resources}
+    if not chosen:
+        raise ValidationFailed({"resource_ids": "Select at least one resource."})
+    if chosen - available:
+        raise ValidationFailed({"resource_ids": "Some selected resources are not in your list. Reload the page."})
+    approved = ApprovedList(
+        resources=[
+            ApprovedResource(resource=r.resource, gaps=[g.gap.skill, *r.also_covers], priority=g.gap.priority, source=r.source)
+            for g in state.resources.gaps
+            for r in g.resources
+            if r.resource.id in chosen
+        ]
+    )
+    save_approved_list(db, user_id, approved, get_gap_state(db, user_id), via="manual")
+    return get_resource_state(db, user_id)
+
+
+# --- Roadmap (scheduler) ------------------------------------------------------------
+
+
+def roadmap_snapshot(profile: ProfileOut, approved: ApprovedList) -> dict:
+    """The inputs a roadmap depends on; the roadmap is stale when these change."""
+    return {"approved": approved.model_dump(mode="json"), "profile": {f: getattr(profile, f) for f in FIELDS}}
+
+
+def get_roadmap_state(db: Session, user_id: str) -> RoadmapState:
+    profile = get_profile(db, user_id)
+    approved = get_approved_list(db, user_id)
+    record = db.get(RoadmapRecord, user_id)
+    if record is None:
+        return RoadmapState(status="none", profile=profile, list_approved=approved is not None)
+    return RoadmapState(
+        status="ready",
+        profile=profile,
+        list_approved=approved is not None,
+        roadmap=Roadmap.model_validate(record.roadmap),
+        stale=approved is None or record.snapshot != roadmap_snapshot(profile, approved),
+    )
+
+
+def save_roadmap(db: Session, user_id: str, roadmap: Roadmap, snapshot: dict) -> RoadmapState:
+    data = roadmap.model_dump(mode="json")
+    record = db.get(RoadmapRecord, user_id)
+    if record is None:
+        record = RoadmapRecord(user_id=user_id)
+        db.add(record)
+    record.roadmap = data
+    record.snapshot = snapshot
+    db.add(AgentOutput(user_id=user_id, agent="scheduler", output={"input": snapshot, "roadmap": data}))
+    db.commit()
+    return get_roadmap_state(db, user_id)

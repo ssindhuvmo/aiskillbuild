@@ -1,6 +1,6 @@
 """Course search pipeline: retrieve -> merge_dedupe -> rank -> present.
 
-Each step is a plain function over plain data so milestone 5 can wrap them as LangGraph
+Each step is a plain function over plain data so milestone 6 can wrap them as LangGraph
 nodes (adding live web search before merge_dedupe and URL verification before rank).
 """
 from core.agents.course_search.ranking import diversify, rank
@@ -15,7 +15,7 @@ MIN_SCORE = 0.55  # weaker matches (e.g. another industry's compliance guide) ar
 MIN_RELEVANCE = 0.5  # a resource must cover at least half of what the gap needs, however well it fits otherwise
 PRIORITY = {"high": 0, "medium": 1, "low": 2}
 
-NO_MATCH = "No curated resources match this skill yet. Live web search (next milestone) will fill this in."
+NO_MATCH = "No curated resources match this skill yet. Live web search (a later milestone) will fill this in."
 COVERED_ELSEWHERE = "Covered by resources listed under other skills (see “Also covers”)."
 
 

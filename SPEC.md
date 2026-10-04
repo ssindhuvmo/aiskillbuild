@@ -43,7 +43,10 @@ React page and component layout) and wait for my approval.
    such as relevant data types, regulations and compliance (e.g. HIPAA, PCI-DSS).
    Output structured JSON: inferred strengths (including domain knowledge), gaps
    (each with priority and estimated effort in hours), relevant domain AI use
-   cases, and a short rationale. Clearly label inferred skills as assumptions and
+   cases, and a short rationale. The plan covers at most 8 gaps, chosen by
+   importance for the target role and domain, whose total effort roughly fits
+   hours-per-week × 26; further gaps are kept and shown separately as "Later /
+   optional". Clearly label inferred skills as assumptions and
    let the user correct them ("I already know SQL well", "I've never used Python")
    before moving on.
 4. COURSE SEARCH AGENT: For each gap, find learning resources from two sources:
@@ -67,12 +70,18 @@ React page and component layout) and wait for my approval.
    explains the changes and pauses again until the user approves the list. Graph
    state is persisted per signed-in user (LangGraph SQLite checkpointer or the
    existing database) so refinement resumes after sign-out and sign-in.
+   Until the refinement chat is built (milestone 6), the Resources page has a simple
+   approval step instead: the user unticks resources they don't want and clicks
+   "Approve list". Both produce the same saved approved list per user, which is the
+   scheduler's only input, so the scheduler does not change when refinement arrives.
 6. SCHEDULER AGENT: Turn the approved resource list into a 6-month roadmap that respects
    the weekly hours: monthly themes, week-by-week tasks, milestones and a portfolio
    project per phase. Portfolio projects should solve a realistic problem from the
    user's industry domain using public datasets where possible, so the user can
    show domain + AI expertise together. Total planned hours must not exceed
-   hours-per-week × weeks.
+   hours-per-week × weeks (26 weeks), and no week may exceed the weekly hours. The
+   budget is enforced in plain Python on every LLM reply, not only in the prompt.
+   Links in the roadmap always come from the approved list, never from the LLM.
 7. ROADMAP VIEW: Show the roadmap in React as a clear timeline (collapsible months,
    week-by-week tasks with links, milestones highlighted) and save it to the user's
    profile. Allow export to Markdown as a file download.
@@ -164,12 +173,14 @@ Build one milestone at a time and stop after each so it can be tested.
    user corrections, saved results (flow step 3) — done
 4. Knowledge base + ranking: seed JSON knowledge base, retrieval layer and ranking
    function, Resources page with the ranked list (flow step 4a). Retrieval and
-   ranking stay plain, reusable Python functions so milestone 5 can wrap them as
+   ranking stay plain, reusable Python functions so milestone 6 can wrap them as
    graph nodes — done
-5. Live web search + conversational refinement (flow steps 4b–5). Introduces
+5. Scheduler agent, roadmap view, saving and Markdown export (flow steps 6–7),
+   with a simple approval step on the Resources page that saves the approved list
+6. Live web search + conversational refinement (flow steps 4b–5). Introduces
    LangGraph: the course search / refinement graph with URL verification,
-   pause/resume refinement and approval
-6. Scheduler agent, roadmap view, saving and Markdown export (flow steps 6–7)
+   pause/resume refinement and approval. Approval writes the same approved list
+   the scheduler already reads
 
 ## Definition of done
 I can start the backend (uvicorn) and the frontend (npm run dev), open the app in

@@ -11,12 +11,18 @@ function whyThis(item, profile) {
   return parts.join(" · ");
 }
 
-export default function ResourceCard({ item, profile }) {
+export default function ResourceCard({ item, profile, selected, onToggle }) {
   const r = item.resource;
   return (
-    <li className="resource">
+    <li className={`resource${selected ? "" : " deselected"}`}>
       <div className="skill-head">
-        <a href={r.url} target="_blank" rel="noopener noreferrer"><strong>{r.title}</strong></a>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggle(r.id)}
+          aria-label={`Include ${r.title} in my roadmap`}
+        />
+        <a href={r.url} target="_blank" rel="noopener noreferrer"><strong>{r.title} ↗</strong></a>
         <span className="muted">{r.provider}</span>
       </div>
       <div className="skill-head">

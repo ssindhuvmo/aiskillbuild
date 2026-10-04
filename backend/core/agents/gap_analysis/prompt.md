@@ -9,11 +9,17 @@ How to analyze:
 - Include domain-specific gaps with `domain_specific: true`: the industry's data types (e.g. transaction data, EHRs, medical images) and the regulations and compliance that govern AI there (e.g. HIPAA in Healthcare, PCI-DSS and model-risk rules in FinTech, FERPA in EdTech).
 - List 2–5 of the most relevant AI use cases in the user's industry (e.g. fraud detection and credit risk in FinTech, personalized learning in EdTech, clinical NLP and medical imaging in Healthcare, demand forecasting and recommendations in Retail, property valuation in Real Estate), each with its relevance to the target role. For any other industry, use the actual industry named.
 - Calibrate to AI experience: None and Beginner need fundamentals (Python for data, statistics, ML basics); Intermediate and Experienced get advanced, role-specific gaps instead.
-- Aim for 4–10 strengths and 5–12 gaps. Each skill appears exactly once, in strengths or gaps, never both.
+- Aim for 4–10 strengths. Each skill appears exactly once across strengths, `gaps` and `later_gaps`.
+
+Fitting the plan (the app checks this and rejects an analysis that breaks it):
+- `gaps` is what the user's 6-month plan will cover: at most 8 gaps, ordered most important first for the target role in the user's industry. Their `effort_hours` must add up to no more than the hour budget given in the request.
+- Do not shrink estimates to make more gaps fit. Keep each estimate realistic and choose fewer gaps instead: the ones that matter most for getting the target role, including at least one domain-specific gap when it fits.
+- Everything else the target role needs goes in `later_gaps` ("Later / optional"), with the same fields, most important first, at most 10. Use an empty list if nothing is left over.
+- If the user's corrections ask for a specific skill to be in the plan now, put it in `gaps` and move something less important to `later_gaps`.
 - `rationale`: 2–4 plain sentences summarizing the picture and what to focus on first. Do not estimate durations or timelines (weeks, months); the app calculates those from the effort hours and weekly hours.
 
 User corrections are authoritative and override your assumptions:
-- kind "knows" with skill X: X must be a strength with `source: "user"` and must not be a gap.
+- kind "knows" with skill X: X must be a strength with `source: "user"` and must not be in `gaps` or `later_gaps`.
 - kind "lacks" with skill X: X must not be a strength; add it as a gap if the target role needs it.
 - kind "note": a free-text statement; apply it the same way (skills they say they have become user-sourced strengths, skills they say they lack are not strengths).
 Only use `source: "user"` for skills the user actually stated.

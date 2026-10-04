@@ -6,6 +6,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+MAX_GAPS = 8  # gaps in the plan; anything further goes to later_gaps
+
+
 class Correction(BaseModel):
     """A user's correction to the inferred skills. "knows"/"lacks" name one skill (from the
     buttons on the page); "note" is free text such as "I've never used Python"."""
@@ -49,6 +52,9 @@ class DomainUseCase(BaseModel):
 
 class GapAnalysis(BaseModel):
     strengths: list[Strength] = Field(min_length=1, max_length=15)
-    gaps: list[Gap] = Field(min_length=1, max_length=15)
+    # The gaps the 6-month plan covers: most important first, sized to fit the hour budget.
+    gaps: list[Gap] = Field(min_length=1, max_length=MAX_GAPS)
+    # "Later / optional": real gaps that do not fit this plan. No resources or roadmap time are planned for them.
+    later_gaps: list[Gap] = Field(default=[], max_length=10)
     domain_use_cases: list[DomainUseCase] = Field(min_length=1, max_length=6)
     rationale: str = Field(min_length=1, max_length=1500)

@@ -73,6 +73,44 @@ def test_list_goes_stale_when_gaps_or_profile_change(anon, fake_gaps):
     assert client.post("/api/resources/search").status_code == 409
 
 
+def ids_of(state):
+    return [r["resource"]["id"] for g in state["resources"]["gaps"] for r in g["resources"]]
+
+
+def test_approve_saves_the_selected_resources(anon, fake_gaps):
+    client = gaps_confirmed_user(anon, "r6", fake_gaps)
+    assert client.post("/api/resources/approve", json={"resource_ids": ["x"]}).status_code == 409  # no list yet
+    state = client.post("/api/resources/search").json()
+    assert state["approved_ids"] is None
+    ids = ids_of(state)
+    keep = ids[1:]  # deselect the first resource
+
+    assert client.post("/api/resources/approve", json={"resource_ids": []}).status_code == 422
+    assert client.post("/api/resources/approve", json={"resource_ids": [*keep, "not-in-my-list"]}).status_code == 422
+    state = client.post("/api/resources/approve", json={"resource_ids": keep}).json()
+    assert state["approved_ids"] == keep and state["approval_stale"] is False
+
+    client.post("/api/auth/logout")
+    login(client, "r6")
+    assert client.get("/api/resources").json()["approved_ids"] == keep
+
+
+def test_approval_goes_stale_when_the_list_changes(anon, fake_gaps):
+    client = gaps_confirmed_user(anon, "r7", fake_gaps)
+    ids = ids_of(client.post("/api/resources/search").json())
+    client.post("/api/resources/approve", json={"resource_ids": ids})
+
+    fake_gaps(analysis(gaps=(("Deep learning with PyTorch", 30),)))
+    client.post("/api/gaps/analyze", json={})
+    client.post("/api/gaps/confirm")
+    assert client.get("/api/resources").json()["approval_stale"] is True
+    assert client.post("/api/resources/approve", json={"resource_ids": ids}).status_code == 409  # stale list
+    state = client.post("/api/resources/search").json()
+    assert state["approval_stale"] is True  # rebuilt, but not approved again yet
+    state = client.post("/api/resources/approve", json={"resource_ids": ids_of(state)}).json()
+    assert state["approval_stale"] is False
+
+
 def test_users_only_see_their_own_resources(anon, fake_gaps):
     gaps_confirmed_user(anon, "r4", fake_gaps)
     anon.post("/api/resources/search")

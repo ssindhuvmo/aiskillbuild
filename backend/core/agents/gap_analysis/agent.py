@@ -13,11 +13,13 @@ from sqlalchemy.orm import Session
 from core import repository
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis, GapInput
 from core.agents.intake.validation import FIELDS
+from core.agents.scheduler.budget import WEEKS, budget
 from core.llm import MODEL, get_client
 from core.schemas import GapState
 
 PROMPT = (Path(__file__).parent / "prompt.md").read_text(encoding="utf-8")
 MAX_ATTEMPTS = 3
+EFFORT_TOLERANCE = 1.1  # the gaps' total effort only has to fit the hour budget roughly
 
 
 class GapAnalysisFailed(Exception):
@@ -36,7 +38,7 @@ def check_rules(result: GapAnalysis, data: GapInput) -> list[str]:
     """Checks the schema cannot express. Returns problems; empty means OK."""
     problems = []
     strengths = [_norm(s.skill) for s in result.strengths]
-    gaps = [_norm(g.skill) for g in result.gaps]
+    gaps = [_norm(g.skill) for g in result.gaps + result.later_gaps]  # a later gap is still a gap
     seen: set[str] = set()
     for name in strengths + gaps:
         if name in seen:
@@ -52,6 +54,13 @@ def check_rules(result: GapAnalysis, data: GapInput) -> list[str]:
             problems.append(f'The user said they know "{c.skill}"; list it as a strength with source "user".')
         if c.kind == "lacks" and skill in strengths:
             problems.append(f'The user said they do not have "{c.skill}", so it must not be a strength.')
+    effort, limit = sum(g.effort_hours for g in result.gaps), budget(data.hours_per_week)
+    if effort > limit * EFFORT_TOLERANCE:
+        problems.append(
+            f"The gaps total {effort} hours of effort, but the user has {limit} hours ({data.hours_per_week} per week "
+            f"x {WEEKS} weeks). Move the least important gaps to later_gaps until the rest fits; do not shrink "
+            "realistic estimates."
+        )
     return problems
 
 
@@ -60,6 +69,8 @@ def _request(data: GapInput, problems: list[str]) -> str:
     corrections = [c.model_dump(exclude_none=True) for c in data.corrections]
     text = (
         f"Profile:\n{json.dumps(profile, indent=2)}\n\n"
+        f"Hour budget for the plan: {budget(data.hours_per_week)} hours "
+        f"({data.hours_per_week} per week x {WEEKS} weeks).\n\n"
         f"User corrections:\n{json.dumps(corrections, indent=2) if corrections else 'none'}"
     )
     if problems:

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { analyzeGaps, confirmGaps, getGaps } from "../api.js";
+import Progress from "../components/Progress.jsx";
 
 const PRIORITY = { high: 0, medium: 1, low: 2 };
 
@@ -13,23 +14,6 @@ function progressMessages({ target_role: role, domain }) {
     "Estimating the effort for each skill gap…",
     "Almost there — putting it all together…",
   ];
-}
-
-// Rotates friendly status lines while the 20–40 s analysis runs.
-function Progress({ profile }) {
-  const messages = progressMessages(profile);
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setI((n) => Math.min(n + 1, messages.length - 1)), 6000);
-    return () => clearInterval(t);
-  }, [messages.length]);
-  return (
-    <main className="card progress" aria-live="polite">
-      <div className="bar"><span /></div>
-      <p className="progress-msg">{messages[i]}</p>
-      <p className="muted">This usually takes 20–40 seconds.</p>
-    </main>
-  );
 }
 
 const key = (c) => `${c.kind}:${(c.skill || c.text).toLowerCase()}`;
@@ -80,7 +64,9 @@ export default function SkillGaps() {
 
   if (loadError) return <main className="card"><p className="error">{loadError}</p></main>;
   if (!state) return <main className="card"><p>Loading…</p></main>;
-  if (running) return <Progress profile={state.profile} />;
+  if (running) {
+    return <Progress messages={progressMessages(state.profile)} note="This usually takes 20–40 seconds." />;
+  }
 
   const { profile, analysis } = state;
 
@@ -135,6 +121,34 @@ export default function SkillGaps() {
   const gaps = [...analysis.gaps].sort((a, b) => PRIORITY[a.priority] - PRIORITY[b.priority]);
   const totalHours = gaps.reduce((n, g) => n + g.effort_hours, 0);
   const weeks = Math.ceil(totalHours / profile.hours_per_week);
+  const later = analysis.later_gaps || [];
+
+  // One gap row; `include` adds an "Add to my plan" correction for later / optional gaps.
+  function gapItem(g, include) {
+    const knows = { kind: "knows", skill: g.skill, text: `I already know ${g.skill}` };
+    const want = { kind: "note", text: `Put "${g.skill}" in my plan now` };
+    return (
+      <li key={g.skill}>
+        <div className="skill-head">
+          <strong>{g.skill}</strong>
+          <span className={`tag prio-${g.priority}`}>{g.priority}</span>
+          <span className="tag">{g.effort_hours} h</span>
+          {g.domain_specific && <span className="tag domain">{profile.domain}</span>}
+        </div>
+        <p className="muted">{g.why_needed}</p>
+        <div className="row">
+          <button className="link" disabled={noted.has(key(knows))} onClick={() => add(knows)}>
+            {noted.has(key(knows)) ? "Noted" : "I already know this"}
+          </button>
+          {include && (
+            <button className="link" disabled={noted.has(key(want))} onClick={() => add(want)}>
+              {noted.has(key(want)) ? "Noted" : "Add to my plan"}
+            </button>
+          )}
+        </div>
+      </li>
+    );
+  }
 
   return (
     <main className="gaps">
@@ -180,30 +194,24 @@ export default function SkillGaps() {
         <section className="card">
           <h2>Gaps to close</h2>
           <p className="muted">
-            About <strong>{totalHours} hours</strong> in total — roughly {weeks} weeks at {profile.hours_per_week}{" "}
-            hrs/week. Your roadmap will prioritize these.
+            The {gaps.length} most important gaps for your 6-month plan: about <strong>{totalHours} hours</strong>,
+            roughly {weeks} weeks at {profile.hours_per_week} hrs/week (your plan has {profile.hours_per_week * 26}{" "}
+            hours).
           </p>
-          <ul className="skills">
-            {gaps.map((g) => {
-              const c = { kind: "knows", skill: g.skill, text: `I already know ${g.skill}` };
-              return (
-                <li key={g.skill}>
-                  <div className="skill-head">
-                    <strong>{g.skill}</strong>
-                    <span className={`tag prio-${g.priority}`}>{g.priority}</span>
-                    <span className="tag">{g.effort_hours} h</span>
-                    {g.domain_specific && <span className="tag domain">{profile.domain}</span>}
-                  </div>
-                  <p className="muted">{g.why_needed}</p>
-                  <button className="link" disabled={noted.has(key(c))} onClick={() => add(c)}>
-                    {noted.has(key(c)) ? "Noted" : "I already know this"}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <ul className="skills">{gaps.map((g) => gapItem(g, false))}</ul>
         </section>
       </div>
+
+      {later.length > 0 && (
+        <section className="card">
+          <h2>Later / optional</h2>
+          <p className="muted">
+            Also useful for {profile.target_role}, but they don't fit this 6-month plan. No resources or roadmap time
+            are planned for them. Add one to your plan and update the analysis to swap it in.
+          </p>
+          <ul className="skills">{later.map((g) => gapItem(g, true))}</ul>
+        </section>
+      )}
 
       <section className="card">
         <h2>AI use cases in {profile.domain}</h2>

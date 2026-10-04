@@ -73,3 +73,24 @@ class ResourceListRecord(Base):
     items: Mapped[dict] = mapped_column(JSON)  # ResourceList
     snapshot: Mapped[dict] = mapped_column(JSON)  # {"analysis": GapAnalysis, "profile": SearchProfile} it was built from
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class ApprovedListRecord(Base):
+    """The resources the user approved for their roadmap (every approval is also logged in agent_outputs)."""
+
+    __tablename__ = "approved_lists"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    items: Mapped[dict] = mapped_column(JSON)  # ApprovedList
+    snapshot: Mapped[dict] = mapped_column(JSON)  # same shape as ResourceListRecord.snapshot
+    approved_via: Mapped[str] = mapped_column(String(32))  # "manual", later "refinement"
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class RoadmapRecord(Base):
+    """The user's current roadmap (every run is also logged in agent_outputs)."""
+
+    __tablename__ = "roadmaps"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    roadmap: Mapped[dict] = mapped_column(JSON)  # Roadmap
+    snapshot: Mapped[dict] = mapped_column(JSON)  # {"approved": ApprovedList, "profile": the five inputs} it was built from
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)

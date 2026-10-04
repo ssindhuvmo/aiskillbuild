@@ -35,6 +35,7 @@ const json = (method, body) => ({
 export const getMe = () => request("/api/auth/me");
 export const googleLogin = (credential) => request("/api/auth/google", json("POST", { credential }));
 export const logout = () => request("/api/auth/logout", json("POST"));
+export const startOver = () => request("/api/account/data", { method: "DELETE" });
 
 export const getIntake = () => request("/api/intake");
 export const getDomains = () => request("/api/domains");
@@ -47,6 +48,21 @@ export const confirmGaps = () => request("/api/gaps/confirm", json("POST"));
 
 export const getResources = () => request("/api/resources");
 export const searchResources = () => request("/api/resources/search", json("POST"));
+export const approveResources = (resource_ids) => request("/api/resources/approve", json("POST", { resource_ids }));
+
+export const getRoadmap = () => request("/api/roadmap");
+export const generateRoadmap = () => request("/api/roadmap/generate", json("POST"));
+
+// Fetches the Markdown export and saves it as a file.
+export async function downloadRoadmap() {
+  const res = await fetch("/api/roadmap/export.md");
+  if (res.status === 401) onUnauthorized();
+  if (!res.ok) throw new Error(`Download failed (${res.status}).`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: "ai-career-roadmap.md" });
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // Streams the reply over SSE. Handlers: onToken(text), onState(profile), onError(msg).
 export async function streamChat(message, { onToken, onState, onError }) {
