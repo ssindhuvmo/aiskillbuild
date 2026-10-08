@@ -11,25 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import requests  # noqa: E402
-
-import core.config  # noqa: E402,F401  (injects truststore: the OS certificate store verifies HTTPS)
+from core.agents.course_search.verify import check  # noqa: E402
 from core.knowledge.store import load_knowledge_base  # noqa: E402
-
-HEADERS = {"User-Agent": "Mozilla/5.0 (AI Career Strategist link check)"}
-BLOCKED = {401, 403, 429}
-
-
-def check(url: str) -> tuple[str, str]:
-    try:
-        r = requests.head(url, headers=HEADERS, allow_redirects=True, timeout=20)
-        if r.status_code >= 400:  # some servers reject HEAD; retry with GET
-            r = requests.get(url, headers=HEADERS, allow_redirects=True, timeout=20, stream=True)
-        if r.status_code < 400:
-            return "ok", str(r.status_code)
-        return ("blocked" if r.status_code in BLOCKED else "fail"), str(r.status_code)
-    except requests.RequestException as e:
-        return "fail", type(e).__name__
 
 
 def main() -> int:

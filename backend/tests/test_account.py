@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from app.main import app
 from core import db as dbmod
 from core import repository
+from core.agents.course_search.graph import get_graph
 from core.db import Base
 from tests.test_resources import fake_gaps  # noqa: F401  (fixture)
 from tests.test_roadmap import approved_user, fake  # noqa: F401  (fixture)
@@ -49,6 +50,8 @@ def test_start_over_deletes_all_of_the_users_data(anon, fake_gaps, fake):  # noq
     assert anon.get("/api/gaps").json()["status"] == "none"
     assert anon.get("/api/resources").json()["status"] == "none"
     assert anon.get("/api/roadmap").json()["status"] == "none"
+    # The refinement chat lives in the graph's checkpoints, not in a table: it is gone too.
+    assert get_graph().get_state({"configurable": {"thread_id": "s1"}}).values == {}
 
 
 def test_start_over_leaves_other_users_untouched(anon, fake_gaps, fake):  # noqa: F811

@@ -28,7 +28,7 @@ def approved_user(client, sub, fake_gaps):  # noqa: F811
     """Signed in with confirmed gaps, a resource list and every resource approved. Returns the ids."""
     gaps_confirmed_user(client, sub, fake_gaps)
     ids = resource_ids(client.post("/api/resources/search").json())
-    assert client.post("/api/resources/approve", json={"resource_ids": ids}).status_code == 200
+    assert client.post("/api/resources/approve").status_code == 200
     return ids
 
 
@@ -83,17 +83,11 @@ def test_llm_failure_gives_friendly_error(anon, fake_gaps, monkeypatch):  # noqa
     assert r.status_code == 503 and "ANTHROPIC_API_KEY" in r.json()["detail"]
 
 
-def test_roadmap_goes_stale_when_approval_or_profile_changes(anon, fake_gaps, fake):  # noqa: F811
+def test_roadmap_goes_stale_when_the_profile_changes(anon, fake_gaps, fake):  # noqa: F811
+    # (A changed approval is covered in test_course_graph.py, where the list is refined by chat.)
     ids = approved_user(anon, "m6", fake_gaps)
-    fake(draft(resource_id=ids[0]), draft(resource_id=ids[0]))
+    fake(draft(resource_id=ids[0]))
     assert anon.post("/api/roadmap/generate").json()["stale"] is False
-
-    # Approving a different selection makes the roadmap stale until it is regenerated.
-    anon.post("/api/resources/approve", json={"resource_ids": ids[:1]})
-    state = anon.get("/api/roadmap").json()
-    assert state["stale"] is True and state["list_approved"] is True
-    state = anon.post("/api/roadmap/generate").json()
-    assert state["stale"] is False and state["roadmap"]["unscheduled"] == []
 
     # A profile edit un-confirms the gaps, so the approval no longer counts.
     anon.put("/api/profile", json={"hours_per_week": 12})

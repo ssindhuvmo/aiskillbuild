@@ -78,8 +78,14 @@ h2.inline { margin:0; }
 .tag.free { background:#dcf5e7; color:var(--ok); } .tag.paid { background:#fff3d6; color:#8a5a00; }
 .tag.fmt-project { background:#e6e8ff; color:var(--accent); }
 .why { font-style:italic; }
-.resource input[type=checkbox] { width:auto; margin:0; accent-color:var(--accent); }
-.resource.deselected { opacity:.55; }
+.tag.web { background:#e0f2fe; color:#075985; }
+.resource .remove { margin-left:auto; }
+.refine { display:grid; grid-template-columns:1fr 360px; gap:12px; align-items:start; }
+@media (max-width:900px) { .refine { grid-template-columns:1fr; } }
+.refine-chat { position:sticky; top:12px; }
+.refine-chat .log { height:38vh; }
+.approve { margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+.approve p { margin:0 0 8px; }
 h2.phase { margin:8px 0 0; }
 .month summary { cursor:pointer; display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; }
 .month[open] summary { margin-bottom:10px; }

@@ -126,7 +126,7 @@ def test_find_resources_with_any_retriever():
     assert by_skill["Low gap"].resources[0].also_covers == ["High gap"]
     assert [r.resource.id for r in by_skill["High gap"].resources] == ["own"]
     assert by_skill["Covered gap"].resources == [] and "other skills" in by_skill["Covered gap"].note
-    assert by_skill["Unknown gap"].resources == [] and "web search" in by_skill["Unknown gap"].note
+    assert by_skill["Unknown gap"].resources == [] and by_skill["Unknown gap"].note == search.NO_MATCH
     assert all(limit == search.RETRIEVE_LIMIT for _, _, limit in retriever.calls)
 
 

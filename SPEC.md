@@ -176,11 +176,11 @@ Build one milestone at a time and stop after each so it can be tested.
    ranking stay plain, reusable Python functions so milestone 6 can wrap them as
    graph nodes — done
 5. Scheduler agent, roadmap view, saving and Markdown export (flow steps 6–7),
-   with a simple approval step on the Resources page that saves the approved list
+   with a simple approval step on the Resources page that saves the approved list — done
 6. Live web search + conversational refinement (flow steps 4b–5). Introduces
    LangGraph: the course search / refinement graph with URL verification,
    pause/resume refinement and approval. Approval writes the same approved list
-   the scheduler already reads
+   the scheduler already reads — built, in testing
 
 ## Definition of done
 I can start the backend (uvicorn) and the frontend (npm run dev), open the app in

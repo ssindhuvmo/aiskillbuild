@@ -77,37 +77,34 @@ def ids_of(state):
     return [r["resource"]["id"] for g in state["resources"]["gaps"] for r in g["resources"]]
 
 
-def test_approve_saves_the_selected_resources(anon, fake_gaps):
+def test_approve_saves_the_whole_list(anon, fake_gaps):
     client = gaps_confirmed_user(anon, "r6", fake_gaps)
-    assert client.post("/api/resources/approve", json={"resource_ids": ["x"]}).status_code == 409  # no list yet
+    assert client.post("/api/resources/approve").status_code == 409  # no list yet
     state = client.post("/api/resources/search").json()
     assert state["approved_ids"] is None
     ids = ids_of(state)
-    keep = ids[1:]  # deselect the first resource
 
-    assert client.post("/api/resources/approve", json={"resource_ids": []}).status_code == 422
-    assert client.post("/api/resources/approve", json={"resource_ids": [*keep, "not-in-my-list"]}).status_code == 422
-    state = client.post("/api/resources/approve", json={"resource_ids": keep}).json()
-    assert state["approved_ids"] == keep and state["approval_stale"] is False
+    state = client.post("/api/resources/approve").json()
+    assert state["approved_ids"] == ids and state["approval_stale"] is False
 
     client.post("/api/auth/logout")
     login(client, "r6")
-    assert client.get("/api/resources").json()["approved_ids"] == keep
+    assert client.get("/api/resources").json()["approved_ids"] == ids
 
 
 def test_approval_goes_stale_when_the_list_changes(anon, fake_gaps):
     client = gaps_confirmed_user(anon, "r7", fake_gaps)
-    ids = ids_of(client.post("/api/resources/search").json())
-    client.post("/api/resources/approve", json={"resource_ids": ids})
+    client.post("/api/resources/search")
+    client.post("/api/resources/approve")
 
     fake_gaps(analysis(gaps=(("Deep learning with PyTorch", 30),)))
     client.post("/api/gaps/analyze", json={})
     client.post("/api/gaps/confirm")
     assert client.get("/api/resources").json()["approval_stale"] is True
-    assert client.post("/api/resources/approve", json={"resource_ids": ids}).status_code == 409  # stale list
+    assert client.post("/api/resources/approve").status_code == 409  # stale list
     state = client.post("/api/resources/search").json()
     assert state["approval_stale"] is True  # rebuilt, but not approved again yet
-    state = client.post("/api/resources/approve", json={"resource_ids": ids_of(state)}).json()
+    state = client.post("/api/resources/approve").json()
     assert state["approval_stale"] is False
 
 

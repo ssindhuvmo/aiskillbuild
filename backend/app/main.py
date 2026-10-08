@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,6 +8,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.routes import account, auth, gaps, intake, resources, roadmap
 from core.config import FRONTEND_ORIGIN, SESSION_COOKIE_SECURE, SESSION_MAX_AGE, SESSION_SECRET
 from core.db import init_db
+
+
+# Show the app's own INFO lines (e.g. web searches per run) alongside uvicorn's log.
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+logging.getLogger("core").addHandler(_handler)
+logging.getLogger("core").setLevel(logging.INFO)
 
 
 @asynccontextmanager

@@ -1,7 +1,7 @@
 """Course search pipeline: retrieve -> merge_dedupe -> rank -> present.
 
-Each step is a plain function over plain data so milestone 6 can wrap them as LangGraph
-nodes (adding live web search before merge_dedupe and URL verification before rank).
+Each step is a plain function over plain data. graph.py wraps them as LangGraph nodes, with
+live web search before merge_dedupe and URL verification before rank.
 """
 from core.agents.course_search.ranking import diversify, rank
 from core.agents.course_search.schemas import GapResources, RankedResource, ResourceList
@@ -15,7 +15,7 @@ MIN_SCORE = 0.55  # weaker matches (e.g. another industry's compliance guide) ar
 MIN_RELEVANCE = 0.5  # a resource must cover at least half of what the gap needs, however well it fits otherwise
 PRIORITY = {"high": 0, "medium": 1, "low": 2}
 
-NO_MATCH = "No curated resources match this skill yet. Live web search (a later milestone) will fill this in."
+NO_MATCH = "No resources found for this skill yet. Ask in the chat to search for more."
 COVERED_ELSEWHERE = "Covered by resources listed under other skills (see “Also covers”)."
 
 
@@ -30,7 +30,8 @@ def retrieve(gaps: list[Gap], profile: SearchProfile, retriever: Retriever) -> l
 
 def merge_dedupe(candidates: list[Candidate]) -> list[Candidate]:
     """Collapse candidates with the same URL (e.g. found in the knowledge base and on the web),
-    keeping the best match score and all matched terms."""
+    keeping the best match score and all matched terms. The curated entry wins over a web one,
+    so its reviewed details are the ones shown."""
     merged: dict[str, Candidate] = {}
     for c in candidates:
         key = url_key(c.resource.url)
@@ -38,8 +39,16 @@ def merge_dedupe(candidates: list[Candidate]) -> list[Candidate]:
         if seen is None:
             merged[key] = c
             continue
-        best = c if c.match_score > seen.match_score else seen
-        merged[key] = best.model_copy(update={"matched_on": sorted(set(seen.matched_on) | set(c.matched_on))})
+        if seen.source != c.source:
+            best = seen if seen.source == "knowledge_base" else c
+        else:
+            best = c if c.match_score > seen.match_score else seen
+        merged[key] = best.model_copy(
+            update={
+                "match_score": max(seen.match_score, c.match_score),
+                "matched_on": sorted(set(seen.matched_on) | set(c.matched_on)),
+            }
+        )
     return list(merged.values())
 
 

@@ -16,6 +16,8 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BACKEND_DIR / 'career_strategist.db'}")
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+# SQLite file for the course search graph's checkpoints (the paused refinement chat per user).
+CHECKPOINT_DB = os.getenv("CHECKPOINT_DB", str(BACKEND_DIR / "graph_checkpoints.db"))
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")

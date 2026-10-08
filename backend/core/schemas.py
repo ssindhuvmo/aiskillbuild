@@ -72,10 +72,12 @@ class ResourceState(BaseModel):
     stale: bool = False  # the gap analysis or profile changed since this list was built
     approved_ids: list[str] | None = None  # resource ids in the approved list; None = nothing approved yet
     approval_stale: bool = False  # the list changed since it was approved
+    messages: list[ChatMessage] = []  # the refinement chat
+    notice: str | None = None  # e.g. live web search was unavailable for this list
 
 
-class ApproveIn(BaseModel):
-    resource_ids: list[str]
+class RemoveIn(BaseModel):
+    resource_id: str
 
 
 class RoadmapState(BaseModel):

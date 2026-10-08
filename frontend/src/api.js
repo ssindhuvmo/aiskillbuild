@@ -48,7 +48,8 @@ export const confirmGaps = () => request("/api/gaps/confirm", json("POST"));
 
 export const getResources = () => request("/api/resources");
 export const searchResources = () => request("/api/resources/search", json("POST"));
-export const approveResources = (resource_ids) => request("/api/resources/approve", json("POST", { resource_ids }));
+export const removeResource = (resource_id) => request("/api/resources/remove", json("POST", { resource_id }));
+export const approveResources =() => request("/api/resources/approve", json("POST"));
 
 export const getRoadmap = () => request("/api/roadmap");
 export const generateRoadmap = () => request("/api/roadmap/generate", json("POST"));
@@ -64,11 +65,12 @@ export async function downloadRoadmap() {
   URL.revokeObjectURL(url);
 }
 
-// Streams the reply over SSE. Handlers: onToken(text), onState(profile), onError(msg).
-export async function streamChat(message, { onToken, onState, onError }) {
+// Streams a chat reply over SSE from /api/intake/chat or /api/resources/chat.
+// Handlers: onToken(text), onState(event: {profile} or {resources}), onError(msg).
+export async function streamChat(path, message, { onToken, onState, onError }) {
   let res;
   try {
-    res = await fetch("/api/intake/chat", json("POST", { message }));
+    res = await fetch(path, json("POST", { message }));
   } catch {
     onError("Cannot reach the server. Is the backend running on port 8000?");
     return;
@@ -78,7 +80,11 @@ export async function streamChat(message, { onToken, onState, onError }) {
     return;
   }
   if (!res.ok || !res.body) {
-    onError(`Request failed (${res.status}).`);
+    let detail = "";
+    try {
+      detail = (await res.json()).detail;
+    } catch {}
+    onError(typeof detail === "string" && detail ? detail : `Request failed (${res.status}).`);
     return;
   }
   const reader = res.body.getReader();
@@ -95,7 +101,7 @@ export async function streamChat(message, { onToken, onState, onError }) {
       if (!line) continue;
       const evt = JSON.parse(line.slice(6));
       if (evt.type === "token") onToken(evt.text);
-      else if (evt.type === "state") onState(evt.profile);
+      else if (evt.type === "state") onState(evt);
       else if (evt.type === "error") onError(evt.message);
     }
   }

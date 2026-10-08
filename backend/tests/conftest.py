@@ -6,6 +6,7 @@ os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["GOOGLE_CLIENT_ID"] = "test-client-id"
 os.environ["SESSION_SECRET"] = "test-session-secret"
 os.environ["SESSION_COOKIE_SECURE"] = "true"
+os.environ["CHECKPOINT_DB"] = ":memory:"  # the course search graph's checkpoints
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -20,6 +21,23 @@ dbmod.SessionLocal.configure(bind=dbmod.engine)
 
 from app.main import app  # noqa: E402
 from core import auth  # noqa: E402
+from core.agents.course_search import verify, web  # noqa: E402
+
+
+class FakeSearcher:
+    """Stands in for live web search: returns the scripted candidates for a gap's skill name
+    (none by default) and records every call."""
+
+    def __init__(self, results=None):
+        self.results = results or {}
+        self.calls = []
+
+    def search(self, gap, profile, hint=None):
+        self.calls.append((gap.skill, hint))
+        found = self.results.get(gap.skill, [])
+        if isinstance(found, Exception):
+            raise found
+        return list(found)
 
 
 def fake_verify(credential: str) -> dict:
@@ -39,6 +57,17 @@ def fake_verify(credential: str) -> dict:
 @pytest.fixture(autouse=True)
 def _fake_google(monkeypatch):
     monkeypatch.setattr(auth, "verify_google_token", fake_verify)
+
+
+@pytest.fixture(autouse=True)
+def searcher(monkeypatch):
+    """No network: web search finds nothing unless a test fills `searcher.results`, and every
+    link checks out unless a test sets `searcher.link_status[url]`."""
+    fake = FakeSearcher()
+    fake.link_status = {}
+    monkeypatch.setattr(web, "get_searcher", lambda: fake)
+    monkeypatch.setattr(verify, "get_checker", lambda: lambda url: (fake.link_status.get(url, "ok"), "fake"))
+    return fake
 
 
 @pytest.fixture()

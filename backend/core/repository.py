@@ -228,14 +228,18 @@ def get_resource_state(db: Session, user_id: str) -> ResourceState:
         return ResourceState(status="none", profile=gap_state.profile, gaps_confirmed=ready)
     snapshot = _resource_snapshot(gap_state)
     approval = db.get(ApprovedListRecord, user_id)
+    resources = ResourceList.model_validate(record.items)
+    listed = [r.resource.id for g in resources.gaps for r in g.resources]
+    approved_ids = [r["resource"]["id"] for r in approval.items["resources"]] if approval else None
     return ResourceState(
         status="ready",
         profile=gap_state.profile,
         gaps_confirmed=ready,
-        resources=ResourceList.model_validate(record.items),
+        resources=resources,
         stale=not ready or record.snapshot != snapshot,
-        approved_ids=[r["resource"]["id"] for r in approval.items["resources"]] if approval else None,
-        approval_stale=approval is not None and (not ready or approval.snapshot != snapshot),
+        approved_ids=approved_ids,
+        # Approval covers the whole list, so a refined list no longer matches it.
+        approval_stale=approval is not None and (not ready or approval.snapshot != snapshot or approved_ids != listed),
     )
 
 
@@ -254,9 +258,8 @@ def save_resource_list(db: Session, user_id: str, resources: ResourceList, gap_s
 
 
 # --- Approved list ------------------------------------------------------------------
-# The contract between course search and the scheduler: whatever produces the final list
-# (the Resources page now, the refinement graph in milestone 6) calls save_approved_list,
-# and the scheduler only ever reads get_approved_list.
+# The contract between course search and the scheduler: the refinement graph calls
+# save_approved_list when the user approves, and the scheduler only ever reads get_approved_list.
 
 
 def get_approved_list(db: Session, user_id: str) -> ApprovedList | None:
@@ -282,28 +285,17 @@ def save_approved_list(db: Session, user_id: str, approved: ApprovedList, gap_st
     db.commit()
 
 
-def approve_resources(db: Session, user_id: str, resource_ids: list[str]) -> ResourceState:
-    """Approve the chosen resources from the user's saved list. Only ids are accepted, so the
-    approved resources (and their links) always come from the server's own list."""
-    state = get_resource_state(db, user_id)
-    if state.status != "ready" or state.stale:
-        raise NotReady("Build an up-to-date resource list first.")
-    chosen = set(resource_ids)
-    available = {r.resource.id for g in state.resources.gaps for r in g.resources}
-    if not chosen:
-        raise ValidationFailed({"resource_ids": "Select at least one resource."})
-    if chosen - available:
-        raise ValidationFailed({"resource_ids": "Some selected resources are not in your list. Reload the page."})
-    approved = ApprovedList(
-        resources=[
-            ApprovedResource(resource=r.resource, gaps=[g.gap.skill, *r.also_covers], priority=g.gap.priority, source=r.source)
-            for g in state.resources.gaps
-            for r in g.resources
-            if r.resource.id in chosen
-        ]
-    )
-    save_approved_list(db, user_id, approved, get_gap_state(db, user_id), via="manual")
-    return get_resource_state(db, user_id)
+def build_approved_list(resources: ResourceList) -> ApprovedList:
+    """Every resource on the list, in list order. The approved resources (and their links) always
+    come from the server's own list, never from the browser or a model."""
+    items = [
+        ApprovedResource(resource=r.resource, gaps=[g.gap.skill, *r.also_covers], priority=g.gap.priority, source=r.source)
+        for g in resources.gaps
+        for r in g.resources
+    ]
+    if not items:
+        raise ValidationFailed({"resources": "Your list is empty. Add at least one resource before approving."})
+    return ApprovedList(resources=items)
 
 
 # --- Roadmap (scheduler) ------------------------------------------------------------

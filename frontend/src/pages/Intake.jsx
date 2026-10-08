@@ -49,7 +49,7 @@ export default function Intake() {
     setError("");
     setSending(true);
     setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
-    await streamChat(text, {
+    await streamChat("/api/intake/chat", text, {
       onToken: (t) =>
         setMessages((m) => {
           const copy = m.slice();
@@ -57,7 +57,7 @@ export default function Intake() {
           copy[copy.length - 1] = { ...last, content: last.content + t };
           return copy;
         }),
-      onState: setProfile,
+      onState: (evt) => setProfile(evt.profile),
       onError: setError,
     });
     setMessages((m) => (m.length && m[m.length - 1].content === "" ? m.slice(0, -1) : m));

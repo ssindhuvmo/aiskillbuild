@@ -11,21 +11,19 @@ function whyThis(item, profile) {
   return parts.join(" · ");
 }
 
-export default function ResourceCard({ item, profile, selected, onToggle }) {
+export default function ResourceCard({ item, profile, onRemove, disabled }) {
   const r = item.resource;
   return (
-    <li className={`resource${selected ? "" : " deselected"}`}>
+    <li className="resource">
       <div className="skill-head">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => onToggle(r.id)}
-          aria-label={`Include ${r.title} in my roadmap`}
-        />
         <a href={r.url} target="_blank" rel="noopener noreferrer"><strong>{r.title} ↗</strong></a>
         <span className="muted">{r.provider}</span>
+        <button className="link remove" disabled={disabled} onClick={() => onRemove(r.id)} aria-label={`Remove ${r.title} from my list`}>
+          Remove
+        </button>
       </div>
       <div className="skill-head">
+        {item.source === "web" && <span className="tag web" title="Found by live web search; the link was checked">web</span>}
         <span className={`tag fmt-${r.format}`}>{r.format}</span>
         <span className="tag">{r.level}</span>
         <span className={`tag ${r.cost}`}>{r.cost}</span>
