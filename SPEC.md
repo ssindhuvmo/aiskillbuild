@@ -1,193 +1,338 @@
-I'm building "AI Career Strategist" — a web app that helps software engineers, data
-analysts and other tech professionals move into AI roles. It understands the user's
-background, goals and constraints, then produces a realistic, personalized 6-month
-upskilling roadmap.
+# AI Career Strategist — Specification (v2)
 
-This is VERSION 1. Build only the scope below. Before writing any code, give me a
-short plan (architecture, folder structure, data model, API endpoints, agent design,
-React page and component layout) and wait for my approval.
+AI Career Strategist helps technology professionals move into AI roles. It builds a
+persistent Career Profile from the user's goal, resume and constraints, finds the
+gaps between where they are and where they want to be, recommends resources and
+portfolio projects, plans a realistic six-month roadmap, tracks progress, matches
+jobs and tailors the resume to a chosen job.
 
-## V1 user flow
-0. SIGN IN WITH GOOGLE: The user signs in with their Google account before using
-   the app. The header shows their name and picture with a "Sign out" option.
-   Returning users who sign in again see their saved profile and progress. Each
-   user can only see and change their own data.
-1. INTAKE (conversational): The user chats with the app, which collects exactly
-   these five inputs:
-   1) Current role (e.g. Backend Engineer, Data Analyst, QA Engineer)
-   2) Target role (e.g. ML Engineer, AI Engineer, Data Scientist, MLOps Engineer)
-   3) AI experience (ai_experience), exactly one of: None (haven't worked with AI
-      yet), Beginner (taken a course or tried some tools), Intermediate (built a
-      small AI/ML project), Experienced (used AI/ML in real work). Asked simply
-      ("Do you have any experience with AI?") with the four options as clickable
-      buttons in the chat; a typed answer is mapped to one option and confirmed
-   4) Current domain: the industry the user works in today (e.g. FinTech, EdTech,
-      Healthcare, Retail, Real Estate, or "Other" with free text)
-   5) Hours per week they can devote to learning (a number, validated as 1–40)
-   A typed answer showing no prior AI knowledge ("nothing yet", "no") maps to None.
-   The assistant asks a follow-up question only when an answer is missing, vague
-   or invalid, then shows a summary of all five for the user to confirm or edit.
-   LLM output never bypasses deterministic validation: invalid or missing values
-   lead to a follow-up question, not a saved record. The chat renders assistant
-   messages as Markdown (lightweight and safe, no raw HTML).
-   No resume upload in V1.
-2. PERSIST PROFILE: Save the confirmed profile to a database, linked to the signed-in
-   Google user (the five inputs, and the skills inferred in step 3).
-3. SKILL-GAP ANALYSIS: Use the LLM to infer the user's likely current skills from
-   their current role, current domain and AI experience, and compare them to
-   what the target role needs. Treat the user's domain experience as a strength to
-   build on: identify the most relevant AI use cases in that industry (e.g. fraud
-   detection and credit risk in FinTech, personalized learning in EdTech, clinical
-   NLP and medical imaging in Healthcare, demand forecasting and recommendations
-   in Retail, property valuation in Real Estate) and include domain-specific gaps
-   such as relevant data types, regulations and compliance (e.g. HIPAA, PCI-DSS).
-   Output structured JSON: inferred strengths (including domain knowledge), gaps
-   (each with priority and estimated effort in hours), relevant domain AI use
-   cases, and a short rationale. The plan covers at most 8 gaps, chosen by
-   importance for the target role and domain, whose total effort roughly fits
-   hours-per-week × 26; further gaps are kept and shown separately as "Later /
-   optional". Clearly label inferred skills as assumptions and
-   let the user correct them ("I already know SQL well", "I've never used Python")
-   before moving on.
-4. COURSE SEARCH AGENT: For each gap, find learning resources from two sources:
-   a) a small curated knowledge base (seed JSON file of ~30–50 high-quality courses,
-      papers and projects, tagged by skill, level, industry domain, format, cost,
-      hours; include general AI resources plus some for each listed domain)
-   b) live web search via the Anthropic web search tool
-   Rank results by relevance to the gap, fit with the user's AI experience,
-   applicability to the user's industry domain, and time cost. Default to a mix of
-   free and paid resources and of courses, papers and hands-on projects. Every
-   resource must have a real URL — never invent links.
-   Built as a LangGraph graph with nodes for: retrieving from the knowledge base,
-   live web search, merging and de-duplicating candidates, verifying URLs,
-   ranking, and presenting the list.
-5. CONVERSATIONAL REFINEMENT: Show the ranked list and let the user chat to change it
-   ("remove this", "I prefer free ones", "add more hands-on projects", "I already know
-   PyTorch"). The agent updates the list and explains its changes.
-   Refinement is part of the same LangGraph graph as step 4: after presenting, the
-   graph pauses for user input (LangGraph interrupt / human-in-the-loop),
-   interprets the request, updates the list (re-searching only when needed),
-   explains the changes and pauses again until the user approves the list. Graph
-   state is persisted per signed-in user (LangGraph SQLite checkpointer or the
-   existing database) so refinement resumes after sign-out and sign-in.
-   Until the refinement chat is built (milestone 6), the Resources page has a simple
-   approval step instead: the user unticks resources they don't want and clicks
-   "Approve list". Both produce the same saved approved list per user, which is the
-   scheduler's only input, so the scheduler does not change when refinement arrives.
-6. SCHEDULER AGENT: Turn the approved resource list into a 6-month roadmap that respects
-   the weekly hours: monthly themes, week-by-week tasks, milestones and a portfolio
-   project per phase. Portfolio projects should solve a realistic problem from the
-   user's industry domain using public datasets where possible, so the user can
-   show domain + AI expertise together. Total planned hours must not exceed
-   hours-per-week × weeks (26 weeks), and no week may exceed the weekly hours. The
-   budget is enforced in plain Python on every LLM reply, not only in the prompt.
-   Links in the roadmap always come from the approved list, never from the LLM.
-7. ROADMAP VIEW: Show the roadmap in React as a clear timeline (collapsible months,
-   week-by-week tasks with links, milestones highlighted) and save it to the user's
-   profile. Allow export to Markdown as a file download.
+This version replaces the V1 spec. It is derived from two source documents, which
+live in the repository:
 
-## Out of scope for V1 (design so these can be added later, but do NOT build them)
-- Resume upload and parsing (V2: will enrich the profile and skill-gap analysis, so
-  keep the profile model and gap-analysis input easy to extend with resume data)
-- Job Match Agent, Resume Update Agent
-- Returning-user progress tracking and re-evaluation
-- Sign-in methods other than Google, roles/admin accounts, payments, scheduling
-  reminders
+- `docs/AI_Career_Strategist_BRD_Iteration2.docx` — business requirements (BR-01 to
+  BR-27). Requirement IDs below refer to it.
+- `docs/Career_Strategist_Product_Requirement_Document.docx` — pages, components and
+  visual design.
+
+Build one milestone at a time (see "Milestones"), plan before coding, and stop after
+each milestone so it can be tested.
+
+## Decisions that override the source documents
+
+Where this spec and the source documents disagree, this spec wins.
+
+1. **React, not Streamlit.** The PRD describes a Streamlit UI. The app is React +
+   FastAPI and stays that way; the PRD's pages, components and visual design are
+   applied to React.
+2. **Real AI, not mocked data.** The PRD asks for mocked outputs. The app uses real
+   agents. Mock JSON is only used in tests and for an optional demo account.
+3. **Job matching and resume tailoring are in scope** (BR-26, BR-27, both Must).
+   The BRD's statements that defer them are superseded.
+4. **Google sign-in stays** (BR-08). LinkedIn login and LinkedIn / GitHub profile
+   import are out of scope.
+5. **The roadmap is always six months (26 weeks).** The PRD's "Expected Timeline"
+   answer is stored as context and does not change the roadmap length.
+
+## What stays from V1
+
+Milestones 1–6 are built. These parts are kept and extended, not rewritten:
+
+- Thin FastAPI routes; all logic in `backend/core/`; all database access in
+  `core/repository.py`; all LLM calls through `core/llm.py` with the model set by
+  `ANTHROPIC_MODEL`.
+- Google sign-in with a signed session cookie. The user ID always comes from the
+  session, never from a path, query or body.
+- "The AI talks, code decides": every LLM output is validated by Pydantic and plain
+  Python rules before it is saved, with retries that feed the problems back.
+- The gap-analysis agent, the ranking function, the `Retriever` interface, the
+  LangGraph course-search / refinement graph, the approved list as the scheduler's
+  only input, the scheduler and its Python hour budget.
+- Snapshots and "out of date" detection between steps.
+- Tests with a fake LLM, fake search, mocked Google verification and in-memory
+  SQLite, needing no network or API key.
+
+## Visual design (PRD section 4)
+
+One design system, defined once as CSS variables and reused by every page.
+
+| Token | Value |
+|---|---|
+| Background | `#0B1120` |
+| Surface / secondary | `#1E293B` |
+| Primary | `#00B5FF` |
+| Accent | `#38BDF8` |
+| Text | White; light gray for secondary text |
+
+- Dark theme, rounded cards, minimal, enterprise-grade, clean typography.
+- Responsive: usable on a phone; the sidebar collapses to a menu.
+- Accessible: keyboard navigation, readable contrast, labels on every control.
+- Initial load under 2 seconds and page navigation under 1 second on a dev machine
+  (long AI steps show progress messages instead).
+
+### Navigation
+
+A left sidebar with: Home, Intake, Dashboard, Skill Analysis, Learning Roadmap,
+Resources, Progress Review, Job Match, Resume Optimizer. Pages that need an earlier
+step show a short note with a link to that step. A persistent profile summary sits
+in the sidebar: name, current role, target role.
+
+### Reusable components
+
+Profile Card, Metric Card, Skill Badge (color-coded), Timeline, Resource Card, Job
+Card, Resume Comparison Viewer, Chat, Progress (loading messages).
+
+## Pages and requirements
+
+### 1. Home
+- Hero: title "AI Career Strategist", subtitle "From 'I want to move into AI' to a
+  realistic 6-month roadmap", buttons **Start Assessment** (sign in, then Intake)
+  and **View Demo** (a read-only sample profile).
+- Four benefit cards: Personalized Career Strategy, Skill Gap Analysis, AI Learning
+  Roadmaps, Job Matching.
+- Footer: About, Contact, Privacy.
+
+### 2. Intake (BR-01 to BR-07, BR-09)
+Chat-style conversation in the main area, profile summary on the right, a progress
+bar for question progress. Name and email come from Google sign-in. The chat
+collects:
+
+| Field | Requirement | Notes |
+|---|---|---|
+| Career goal | BR-01, Must | A target AI role, or "help me choose"; then the app suggests 2–3 suitable roles with reasons and the user picks one |
+| Resume | BR-02, Must to offer | Upload PDF or DOCX. Optional for the user: if skipped, the chat asks for the same information (BR-09) |
+| Current role, years of experience, industry domain | PRD | Pre-filled from the resume when one is uploaded; the user confirms |
+| Weekly learning hours | BR-03, Must | Whole number 1–40 |
+| Capability assessment | BR-04, Must | Self-rating None / Beginner / Intermediate / Experienced for each of: Python, Data and SQL, Machine Learning, AI / LLMs, Cloud. Shown as clickable options. Replaces the single `ai_experience` field; the overall level used by ranking is derived from the Machine Learning and AI / LLMs ratings |
+| Learning preferences | BR-05, Must | Any of: free courses, paid courses, YouTube / video, articles, books, hands-on projects, certifications. Sensible defaults if skipped |
+| Constraints | BR-06, Should | Optional: budget (free only, or a monthly amount), weekends only, must stay in current job, remote only, other |
+| Additional context | BR-07, Should | Optional free text: why AI, expected timeline, side projects, aspirations |
+
+The existing rules still apply: one question at a time, follow-ups only when an
+answer is missing or invalid, deterministic validation before saving, a summary to
+confirm or edit.
+
+**Resume handling.** Text is extracted in Python (PDF and DOCX), then one
+structured-output LLM call returns skills, roles, education, certifications and
+achievements, validated by Pydantic. The user reviews and corrects what was
+extracted before it is saved. The original file is stored per user and never sent
+to the frontend of another user. Limit: 5 MB, PDF or DOCX only.
+
+### 3. Career Profile (BR-10 to BR-12)
+One persistent profile per user combining stated inputs and resume data: career
+goal, professional background, skills and transferable skills, capability levels,
+learning commitment, learning preferences, constraints, additional context, chosen
+career pathway, progress and previous recommendations. It is retrieved on every
+visit and editable at any time; edits mark later steps out of date.
+
+### 4. Dashboard
+- Metric cards: Readiness Score, Skill Coverage, Roadmap Completion, Jobs Applied
+  (jobs the user marked as applied; there is no auto-apply).
+- Career summary card: current role, target role, estimated transition time,
+  current status.
+- Charts: skill distribution (radar), progress trend (line), milestone completion
+  (progress bar).
+- Readiness Score, Skill Coverage and Roadmap Completion are calculated in plain
+  Python from saved data with a documented formula, never by the LLM.
+
+### 5. Skill Analysis (BR-13 to BR-16)
+- Existing skills as tags; missing skills as warning tags.
+- Skill gap chart: horizontal bars of current level against target level per skill.
+- AI summary card: a short explanation of how existing experience and transferable
+  skills support the transition (BR-15).
+- Gaps are prioritized and sequenced (BR-14, BR-16). At most 8 gaps go in the plan,
+  sized to fit weekly hours × 26; the rest are "Later / optional".
+- The analysis now uses the resume data and the capability assessment, so skills
+  are evidence-based where possible. Each strength is marked "From your resume",
+  "You said" or "Assumed". User corrections continue to work.
+- Domain use cases and domain-specific gaps (e.g. fraud detection in FinTech,
+  HIPAA in Healthcare) are kept from V1.
+
+### 6. Resources (BR-17, BR-20, BR-21)
+Sources, all behind the existing `Retriever` / `WebSearcher` interfaces:
+
+1. The curated knowledge base (`backend/data/knowledge_base.json`).
+2. **YouTube**, through the YouTube Data API (`YOUTUBE_API_KEY`): full courses and
+   playlists per skill, plus a maintained list of trusted channels.
+3. Live web search (Anthropic web search tool), which is also how Udemy, Coursera
+   and similar catalogs are reached. They have no open API available to this
+   project, so they are never called directly.
+
+Selection is two-stage (BR-20): search broadly for candidates, then vet and rank.
+Ranking keeps the existing weights and adds: match to the user's learning
+preferences, budget (paid items are dropped when the budget is "free only"), and
+quality signals where the source provides them (rating, views or enrolment).
+Every link is real and verified; the LLM never writes URLs.
+
+Page:
+- Filters: Free / Paid; Beginner / Intermediate / Advanced; type (Course, Video,
+  Article, GitHub Repository, Book, Project).
+- Resource card: title, provider, duration, rating (when known), difficulty, "why
+  this", and buttons **Save**, **Start**, **Complete** (self-reported, BR-21).
+- The refinement chat and **Approve list** stay as built in milestone 6.
+
+### 7. Learning Roadmap (BR-18, BR-19)
+- Six months, three phases, weekly tasks, a portfolio project per phase from the
+  user's industry using a named public dataset (BR-18).
+- Each milestone and task has status, priority, due date and a completion checkbox.
+  Due dates come from a start date the user sets.
+- "Immediate next steps": the first three things to do this week.
+- The plan uses the hours the resources need plus proportionate practice and
+  project time; it does not pad to fill the budget. The summary shows learn,
+  practice, project, planned and free hours.
+- Actions: Download Plan (Markdown), Export PDF, Regenerate Roadmap.
+- Budget rules stay enforced in Python: no week over the weekly hours, total within
+  weekly hours × 26.
+
+### 8. AI Career Transition Report (BRD section 8.4)
+The primary output: one document assembled from saved data, with these sections in
+order: Career Goal; Current Career Profile; Career Fit Assessment; Transferable
+Skills; Capability Gap Analysis; Recommended Career Strategy; Prioritized Learning
+Plan; Recommended Learning Resources (with links); Six-Month Career Transition
+Roadmap; Recommended Portfolio Projects; Immediate Next Steps.
+
+Only Career Fit Assessment and Recommended Career Strategy need new LLM text; the
+rest is assembled in Python from what is already saved. Viewable in the app and
+downloadable as PDF and Markdown.
+
+### 9. Progress Review (BR-22 to BR-25)
+For returning users:
+- Checklist of skills completed, table of courses finished, a confidence slider
+  per skill, a notes box.
+- **Update Progress** saves it to the profile. **Recalculate Readiness Score**
+  refreshes the dashboard.
+- **Refresh my plan** reassesses the gaps using the progress (BR-24) and offers an
+  updated roadmap and next steps (BR-25). Completed work is kept; only the
+  remaining weeks are replanned.
+- Completion is self-reported; nothing is verified with third parties.
+
+### 10. Job Match (BR-26)
+- Sources sit behind a `JobSource` interface. The first source is live web search
+  limited to a short allowlist of job sites, set in config; a jobs API can be added
+  later without changing the page. No scraping of LinkedIn and no logged-in
+  browsing.
+- Every job must have a real, verified posting URL, using the same checks as
+  resources.
+- Match Score is calculated in Python from the overlap between the job's required
+  skills and the user's current skills (profile plus completed progress). The LLM
+  extracts required skills from the posting and writes the match explanation.
+- Filters: Remote, Hybrid, Location, Salary Range.
+- Job table: title, company, match score, salary (when stated), experience.
+- Job detail drawer: description, required skills, missing skills, match
+  explanation.
+- Actions: **Save Job**, **Apply** (opens the posting in a new tab and lets the
+  user mark it as applied), **Update Resume** (opens the Resume Optimizer for that
+  job).
+- Results are saved per user with the date found; postings expire, so the page
+  shows that date and has a Refresh button.
+
+### 11. Resume Optimizer (BR-27)
+- Input: the user's resume (uploaded, or built from the profile if none) and one
+  selected job.
+- Output: a tailored version, shown side by side with the original in the Resume
+  Comparison Viewer, with highlights for added keywords, suggested projects and
+  skill improvements.
+- **The optimizer never invents experience, employers, dates, degrees or
+  certifications.** It may reword, reorder and emphasize what is in the resume and
+  profile, and add skills the user has reported as completed. Anything it suggests
+  that the user has not done is listed separately as "To add once you have done
+  this" and is not placed in the resume. Python checks that every employer, title
+  and date in the output exists in the source.
+- Actions: Download PDF, Download DOCX, Copy Content.
+
+## Agents
+
+| Agent | Status | Notes |
+|---|---|---|
+| Intake | Extend | New fields, resume upload step, "help me choose" a role |
+| Resume parser | New | Structured extraction, user reviews the result |
+| Gap analysis | Extend | Uses resume data and the capability assessment |
+| Course search + refinement (LangGraph) | Extend | Adds the YouTube source, preference-aware ranking, vetting signals |
+| Scheduler | Extend | No padding, task status and due dates, replanning of remaining weeks |
+| Report | New | Writes the two narrative sections; Python assembles the rest |
+| Job search + vetting | New | `JobSource` interface, URL verification, Python match score |
+| Resume optimizer | New | Tailors to one job under the no-invention rule |
+
+Each agent keeps its own folder and prompt file with Pydantic inputs and outputs.
+LangGraph remains limited to flows with a real pause-for-user loop.
 
 ## Tech stack
-- Frontend: React (JavaScript) with Vite, React Router for pages (Intake chat,
-  Skill Gaps, Resources, Roadmap), a simple clean chat UI, and a step indicator
-  showing where the user is in the flow. Use plain CSS or Tailwind; keep
-  dependencies minimal
-- Backend: Python, FastAPI, exposing a REST API the React app calls. Enable CORS
-  for the Vite dev server. Stream chat responses (Server-Sent Events) for the
-  intake and refinement chats so replies appear as they are generated
-- Core logic: a separate Python package (e.g. core/) holding the agents, DB access
-  and models. FastAPI routes only call into this package and contain no business
-  logic
-- LLM: Anthropic API via the official Python SDK, with structured JSON outputs
-  validated by Pydantic. The model is configurable through ANTHROPIC_MODEL in
-  backend/.env (default claude-sonnet-5; use claude-haiku-4-5-20251001 for
-  cheaper development testing). All agents read the model from this one setting
-- Orchestration: LangGraph for the Course Search Agent and conversational
-  refinement (V1 user flow steps 4 and 5). The intake and gap agents stay as
-  plain Python modules. LLM calls inside graph nodes go through core/llm.py so the
-  model stays configurable via ANTHROPIC_MODEL. The graph lives in
-  core/agents/course_search/ and FastAPI routes only invoke it
-- Authentication: Google Sign-In using Google Identity Services on the frontend.
-  The backend verifies the Google ID token with the google-auth library against
-  GOOGLE_CLIENT_ID, creates or finds the user (Google "sub" as the stable user ID,
-  plus email, name and picture), and starts a session with a secure httpOnly
-  cookie signed with SESSION_SECRET. The user ID always comes from the session,
-  never from the URL or request body
-- Database: SQLite with SQLAlchemy (easy to move to Postgres later)
-- Knowledge base: seed JSON + a simple retrieval layer behind an interface, so I can
-  swap in a vector store / RAG later
-- Config via backend/.env (ANTHROPIC_API_KEY, ANTHROPIC_MODEL, DATABASE_URL,
-  FRONTEND_ORIGIN, GOOGLE_CLIENT_ID, SESSION_SECRET) and frontend/.env
-  (VITE_GOOGLE_CLIENT_ID), each with a .env.example; the API key and session
-  secret stay on the backend only and must never reach the frontend; never
-  hard-code secrets
+
+- Frontend: React (JavaScript) with Vite and React Router. Plain CSS with the
+  design tokens above. Charts with Recharts. Keep other dependencies minimal.
+- Backend: Python, FastAPI, REST plus Server-Sent Events for chats.
+- LLM: Anthropic API through the official Python SDK; default `claude-sonnet-5`,
+  `claude-haiku-4-5-20251001` for cheap development testing.
+- Orchestration: LangGraph for course search and refinement only.
+- Database: SQLite with SQLAlchemy. **Add Alembic migrations in milestone 8**, since
+  the profile table changes and from then on data must survive schema changes.
+- File handling: `pypdf` and `python-docx` to read resumes; generated PDF and DOCX
+  for the report, roadmap and tailored resume. Uploads are stored under
+  `backend/uploads/<user_id>/`, which is gitignored.
+- Config in `backend/.env`: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `DATABASE_URL`,
+  `FRONTEND_ORIGIN`, `GOOGLE_CLIENT_ID`, `SESSION_SECRET`, `CHECKPOINT_DB`,
+  `YOUTUBE_API_KEY`, `JOB_SITES`. `frontend/.env`: `VITE_GOOGLE_CLIENT_ID`. Keep
+  both `.env.example` files in sync. Secrets never reach the frontend.
 
 ## Engineering requirements
-- Project layout with separate frontend/ and backend/ folders
-- Each agent (intake, gap analysis, course search, scheduler) is its own module with
-  its own prompt file, clear inputs/outputs as Pydantic models
-- Every API endpoint requires a signed-in user and only returns or changes that
-  user's own data; user_id is not part of API paths
-- Keep the list of supported domains in one config file so new industries can be
-  added without code changes
-- Store conversation state and every agent output in the DB so sessions can resume
-- Handle LLM/JSON errors with retries on the backend, return clear error responses,
-  and show friendly error messages and loading states in the React UI
-- Unit tests (pytest) for the intake input validation, the scheduler's hour-budget
-  logic and the ranking function, plus an intake flow test and auth tests
-  (signed-out requests are rejected; users cannot access each other's data).
-  Tests use a fake LLM client, mocked Google token verification and an in-memory
-  SQLite database, so they need no API key or network
-- Tests run the course search / refinement graph end to end with the fake LLM
-  client and a fake search tool (no network), covering the pause/resume
-  refinement loop and approval
-- Python virtual environment at backend/.venv. The README documents creating it
-  and running the app on Windows and macOS/Linux, including the pip truststore
-  workaround for machines with SSL certificate errors
-  (pip install --use-feature=truststore -r requirements.txt). If backend HTTPS
-  calls (e.g. to Google) hit the same SSL errors, use the Windows certificate
-  store via truststore; never disable certificate verification
-- Git at the project root with a .gitignore excluding .env files (backend and
-  frontend), *.db / *.sqlite*,
-  node_modules/, .venv/, __pycache__/ and dist/. Commit after each working
-  milestone
-- A README with setup and run steps for both backend and frontend, and a CLAUDE.md
-  describing the architecture and conventions for future sessions
-- requirements.txt for the backend, package.json for the frontend, and a short demo
-  walkthrough with two sample user profiles (e.g. "Backend Engineer in FinTech →
-  AI Engineer, Beginner, 8 hrs/week" and "Data Analyst in Healthcare → Data
-  Scientist, None, 5 hrs/week")
+
+- Every endpoint requires a signed-in user and touches only that user's data. New
+  endpoints get a 401 test and a cross-user isolation test.
+- Every external source (YouTube, web search, job sites) sits behind an interface
+  with a fake for tests, and a failure degrades to the remaining sources with a
+  notice on the page instead of an error.
+- Scores, budgets, dates and totals are calculated in Python. The LLM is never the
+  source of a number the user relies on, or of a URL.
+- Uploaded files are validated by type and size, and treated as untrusted input:
+  resume text is passed to the LLM as data, and instructions inside it are ignored.
+- "Start over" deletes the user's rows, graph checkpoints and uploaded files.
+- Never disable SSL verification; use truststore as in V1.
+- README, CLAUDE.md and this file are updated in the same milestone as the code.
+- Commit after each working milestone.
 
 ## Milestones
-Build one milestone at a time and stop after each so it can be tested.
-1. React + FastAPI skeleton and conversational intake (flow steps 1–2) — done
-2. Google sign-in: sessions, per-user data, sign-in/sign-out UI (flow step 0) — done
-3. Skill-gap analysis: gap agent with validated JSON and retries, Skill Gaps page,
-   user corrections, saved results (flow step 3) — done
-4. Knowledge base + ranking: seed JSON knowledge base, retrieval layer and ranking
-   function, Resources page with the ranked list (flow step 4a). Retrieval and
-   ranking stay plain, reusable Python functions so milestone 6 can wrap them as
-   graph nodes — done
-5. Scheduler agent, roadmap view, saving and Markdown export (flow steps 6–7),
-   with a simple approval step on the Resources page that saves the approved list — done
-6. Live web search + conversational refinement (flow steps 4b–5). Introduces
-   LangGraph: the course search / refinement graph with URL verification,
-   pause/resume refinement and approval. Approval writes the same approved list
-   the scheduler already reads — built, in testing
+
+1. React + FastAPI skeleton and conversational intake — done
+2. Google sign-in — done
+3. Skill-gap analysis — done
+4. Knowledge base + ranking — done
+5. Resource approval, scheduler, roadmap — done
+6. Live web search + refinement chat (LangGraph) — built, in testing
+7. **Design system and app shell.** Dark theme and tokens, sidebar navigation,
+   reusable components, Home page, and the existing Intake, Skill Analysis,
+   Resources and Roadmap pages restyled to the PRD. Frontend only; no backend
+   behavior changes.
+8. **Expanded intake, resume upload and Career Profile** (BR-01 to BR-07, BR-09 to
+   BR-12). New profile fields with Alembic migrations, resume parser, gap analysis
+   using resume data and the capability assessment, skill gap chart.
+9. **Resource sources and preferences** (BR-17, BR-20, BR-21). YouTube source,
+   preference- and budget-aware ranking, filters, Save / Start / Complete.
+10. **Roadmap tracking and Transition Report** (BR-18, BR-19, BRD 8.4). Status,
+    due dates, checkboxes, no padding, immediate next steps, the report, PDF export.
+11. **Dashboard and Progress Review** (BR-22 to BR-25). Metrics and charts,
+    progress updates, gap reassessment, replanning of remaining weeks.
+12. **Job Match** (BR-26).
+13. **Resume Optimizer** (BR-27).
+14. **Polish.** Accessibility and mobile pass, View Demo account, performance
+    check, full README and demo walkthrough.
+
+## Out of scope
+
+- Applying to jobs on the user's behalf or any browser automation.
+- Interview preparation coaching.
+- LinkedIn or GitHub login, profile import or scraping.
+- Automatic verification of course completion.
+- Payments, subscriptions, admin accounts, reminders and notifications.
 
 ## Definition of done
-I can start the backend (uvicorn) and the frontend (npm run dev), open the app in
-my browser, sign in with Google, enter my current role, target role, AI
-experience, current domain and weekly hours through the chat, confirm the summary, review and correct the
-inferred skill gaps, edit the suggested resources by chatting, and get a saved
-6-month roadmap with working links, domain-relevant portfolio projects, and a plan
-that fits my weekly hours. Restarting the app and signing in with the same Google
-account reloads my saved profile and roadmap, and a different Google account
-cannot see them.
+
+Signed in with Google, I can upload my resume or answer the intake questions,
+confirm my Career Profile, see evidence-based strengths and prioritized gaps, get
+resources that respect my budget and learning preferences (including YouTube) with
+working links, refine and approve them, and get a six-month roadmap that fits my
+weekly hours with domain portfolio projects. I can download the AI Career
+Transition Report as a PDF. When I come back I can report progress, see my
+readiness score change and get a refreshed plan. I can see matching jobs with a
+match score and an explanation, and for one of them get a tailored resume that
+contains nothing I have not done, as PDF or DOCX. The app uses the PRD's dark
+design throughout, works on a phone, and a different Google account sees none of
+my data.
