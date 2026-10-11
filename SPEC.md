@@ -296,7 +296,7 @@ LangGraph remains limited to flows with a real pause-for-user loop.
 3. Skill-gap analysis — done
 4. Knowledge base + ranking — done
 5. Resource approval, scheduler, roadmap — done
-6. Live web search + refinement chat (LangGraph) — built, in testing
+6. Live web search + refinement chat (LangGraph) — done
 7. **Design system and app shell.** Dark theme and tokens, sidebar navigation,
    reusable components, Home page, and the existing Intake, Skill Analysis,
    Resources and Roadmap pages restyled to the PRD. Frontend only; no backend
