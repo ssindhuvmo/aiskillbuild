@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { downloadRoadmap, generateRoadmap, getRoadmap } from "../api.js";
+import Button from "../components/Button.jsx";
+import Card from "../components/Card.jsx";
+import MetricCard from "../components/MetricCard.jsx";
+import Notice from "../components/Notice.jsx";
+import PageHeader from "../components/PageHeader.jsx";
 import Progress from "../components/Progress.jsx";
+import ProgressBar from "../components/ProgressBar.jsx";
+import { Milestone, Month, Phase, TaskRow, Week } from "../components/Timeline.jsx";
 
 function progressMessages({ target_role: role, domain, hours_per_week: hours }) {
   return [
@@ -15,22 +22,11 @@ function progressMessages({ target_role: role, domain, hours_per_week: hours }) 
   ];
 }
 
-const KIND = { learn: "Learn", practice: "Practice", project: "Project" };
-
-// A task that uses an approved resource links to it; practice and project tasks may have none.
-function Task({ task }) {
-  return (
-    <li>
-      <span className={`tag kind-${task.kind}`}>{KIND[task.kind]}</span> {task.title}{" "}
-      <span className="muted">{task.hours} h</span>
-      {task.resource && (
-        <div>
-          <a href={task.resource.url} target="_blank" rel="noopener noreferrer">{task.resource.title} ↗</a>{" "}
-          <span className="muted">{task.resource.provider}</span>
-        </div>
-      )}
-    </li>
-  );
+// Hours per task kind, summed from the saved plan (display only; the backend owns the budget).
+function hoursByKind(roadmap) {
+  const total = { learn: 0, practice: 0, project: 0 };
+  for (const month of roadmap.months) for (const week of month.weeks) for (const task of week.tasks) total[task.kind] += task.hours;
+  return total;
 }
 
 export default function Roadmap() {
@@ -70,38 +66,56 @@ export default function Roadmap() {
     };
   }, []);
 
-  if (loadError) return <main className="card"><p className="error">{loadError}</p></main>;
-  if (!state) return <main className="card"><p>Loading…</p></main>;
+  const plain = (children) => (
+    <>
+      <PageHeader title="Learning Roadmap" subtitle="Six months, three phases, a portfolio project in each." />
+      {children}
+    </>
+  );
+
+  if (loadError) return plain(<Card><p className="error" role="alert">{loadError}</p></Card>);
+  if (!state) return plain(<Card><p>Loading…</p></Card>);
   if (running) {
-    return <Progress messages={progressMessages(state.profile)} note="This usually takes 30–90 seconds." interval={9000} />;
+    return plain(<Progress messages={progressMessages(state.profile)} note="This usually takes 30–90 seconds." interval={9000} />);
   }
 
   const { profile, roadmap } = state;
 
   if (state.status === "none") {
-    return (
-      <main className="card">
-        <h2>Roadmap</h2>
-        {error && <p className="error">{error}</p>}
+    return plain(
+      <Card>
+        {error && <p className="error" role="alert">{error}</p>}
         {state.list_approved ? (
-          <button onClick={run}>Build my roadmap</button>
+          <div className="row"><Button onClick={run}>Build my roadmap</Button></div>
         ) : (
           <p>Approve your resource list on the <Link to="/resources">Resources</Link> step first, then come back here.</p>
         )}
-      </main>
+      </Card>
     );
   }
 
-  const phaseOf = (month) => roadmap.phases.find((p) => p.months.includes(month));
+  const kinds = hoursByKind(roadmap);
+  const free = roadmap.budget_hours - roadmap.total_hours;
 
   return (
-    <main className="gaps">
+    <>
+      <PageHeader
+        title="Learning Roadmap"
+        subtitle={`${profile.current_role} → ${profile.target_role} · ${roadmap.weeks} weeks at up to ${roadmap.hours_per_week} hrs/week`}
+        actions={
+          <>
+            <Button onClick={() => downloadRoadmap().catch((e) => setError(e.message))}>Download Plan</Button>
+            <Button variant="secondary" onClick={run} disabled={!state.list_approved}>Regenerate Roadmap</Button>
+          </>
+        }
+      />
+
       {state.stale && (
-        <div className="card banner">
+        <Notice>
           {state.list_approved ? (
             <>
               Your approved resources changed since this roadmap was built.{" "}
-              <button className="link" onClick={run}>Rebuild the roadmap</button> to update it.
+              <Button variant="text" onClick={run}>Rebuild the roadmap</Button> to update it.
             </>
           ) : (
             <>
@@ -109,82 +123,80 @@ export default function Roadmap() {
               <Link to="/resources">Resources</Link> step, then rebuild this roadmap.
             </>
           )}
-        </div>
+        </Notice>
       )}
-      {error && <div className="card"><p className="error">{error}</p></div>}
+      {error && <p className="error" role="alert">{error}</p>}
 
-      <section className="card">
-        <h2>Your 6-month roadmap: {profile.current_role} → {profile.target_role}</h2>
-        <p>
-          {roadmap.weeks} weeks at up to {roadmap.hours_per_week} hrs/week. <strong>{roadmap.total_hours} hours</strong>{" "}
-          planned of your {roadmap.budget_hours}-hour budget.
-        </p>
-        <div className="row">
-          <button onClick={() => downloadRoadmap().catch((e) => setError(e.message))}>Download Markdown</button>
-          <button className="secondary" onClick={run} disabled={!state.list_approved}>Rebuild</button>
+      <Card title="Where your hours go">
+        <ProgressBar
+          max={roadmap.budget_hours}
+          label={`${kinds.learn} hours learning, ${kinds.practice} practice, ${kinds.project} project, ${free} free, of ${roadmap.budget_hours}`}
+          segments={[
+            { value: kinds.learn, tone: "primary" },
+            { value: kinds.practice, tone: "accent" },
+            { value: kinds.project, tone: "soft" },
+          ]}
+        />
+        <div className="metrics">
+          <MetricCard label="Learn" value={`${kinds.learn} h`} tone="primary" />
+          <MetricCard label="Practice" value={`${kinds.practice} h`} tone="accent" />
+          <MetricCard label="Project" value={`${kinds.project} h`} tone="soft" />
+          <MetricCard label="Planned" value={`${roadmap.total_hours} h`} />
+          <MetricCard label={`Free in your ${roadmap.budget_hours} h budget`} value={`${free} h`} />
         </div>
-      </section>
+      </Card>
 
-      {roadmap.months.map((month) => {
-        const phase = phaseOf(month.number);
-        return (
-          <div key={month.number} className="gaps">
-            {phase.months[0] === month.number && (
-              <h2 className="phase">Phase {phase.number}: {phase.name} <span className="muted">months {phase.months.join("–")}</span></h2>
-            )}
-            <details className="card month" open={month.number === 1}>
-              <summary>
-                <strong>Month {month.number}: {month.theme}</strong>
-                <span className="muted">weeks {month.weeks[0].number}–{month.weeks[month.weeks.length - 1].number} · {month.hours} h</span>
-              </summary>
-              <p>{month.summary}</p>
-              <ol className="weeks">
-                {month.weeks.map((week) => (
-                  <li key={week.number}>
-                    <div className="skill-head">
-                      <strong>Week {week.number}</strong>
-                      <span>{week.focus}</span>
-                      <span className="tag">{week.hours} h</span>
-                    </div>
-                    <ul className="tasks">
-                      {week.tasks.map((task, i) => <Task key={i} task={task} />)}
-                    </ul>
-                  </li>
-                ))}
-              </ol>
-              <p className="milestone"><strong>Milestone:</strong> {month.milestone}</p>
-            </details>
-            {phase.months[phase.months.length - 1] === month.number && (
-              <section className="card project">
-                <div className="skill-head">
-                  <h2 className="inline">Portfolio project: {phase.project.title}</h2>
-                  <span className="tag domain">{profile.domain}</span>
-                </div>
-                <p>{phase.project.problem}</p>
-                <p><strong>Dataset:</strong> {phase.project.dataset}</p>
-                <ul className="tasks">
-                  {phase.project.deliverables.map((d) => <li key={d}>{d}</li>)}
-                </ul>
-              </section>
-            )}
-          </div>
-        );
-      })}
+      {roadmap.phases.map((phase) => (
+        <Phase key={phase.number} title={`Phase ${phase.number}: ${phase.name}`} meta={`months ${phase.months.join("–")}`}>
+          <Card as="div" className="project">
+            <div className="stack-tight">
+              <div className="card-label">Portfolio project · {profile.domain}</div>
+              <h3>{phase.project.title}</h3>
+              <p>{phase.project.problem}</p>
+              <p className="muted">Dataset: {phase.project.dataset}</p>
+            </div>
+            <div className="stack-tight">
+              <div className="muted">Deliverables</div>
+              <ul className="plain-list">
+                {phase.project.deliverables.map((d) => <li key={d}>{d}</li>)}
+              </ul>
+            </div>
+          </Card>
+
+          {roadmap.months.filter((m) => phase.months.includes(m.number)).map((month) => (
+            <Month
+              key={month.number}
+              title={`Month ${month.number}: ${month.theme}`}
+              meta={`weeks ${month.weeks[0].number}–${month.weeks[month.weeks.length - 1].number} · ${month.hours} h`}
+              summary={month.summary}
+              defaultOpen={month.number === 1}
+            >
+              {month.weeks.map((week) => (
+                <Week key={week.number} title={`Week ${week.number} · ${week.focus}`} meta={`${week.hours} h`}>
+                  {week.tasks.map((task, i) => (
+                    <TaskRow key={i} kind={task.kind} title={task.title} hours={task.hours} link={task.resource} />
+                  ))}
+                </Week>
+              ))}
+              <Milestone>{month.milestone}</Milestone>
+            </Month>
+          ))}
+        </Phase>
+      ))}
 
       {roadmap.unscheduled.length > 0 && (
-        <section className="card">
-          <h2>Approved but not scheduled</h2>
+        <Card title="Approved but not scheduled">
           <p className="muted">These did not fit in your {roadmap.budget_hours}-hour budget. Keep them for later.</p>
-          <ul className="tasks">
+          <ul className="plain-list">
             {roadmap.unscheduled.map((r) => (
               <li key={r.id}>
-                <a href={r.url} target="_blank" rel="noopener noreferrer">{r.title}</a>{" "}
+                <a href={r.url} target="_blank" rel="noopener noreferrer">{r.title} ↗</a>{" "}
                 <span className="muted">{r.provider} · {r.hours} h</span>
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       )}
-    </main>
+    </>
   );
 }

@@ -1,14 +1,20 @@
 # AI Career Strategist
 
-Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full V1.
+Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full
+specification (v2).
 
-**Current status: Milestone 6 of 6** (see Milestones in `SPEC.md`):
+**Current status: Milestone 7 of 14** (see Milestones in `SPEC.md`):
 1. React + FastAPI skeleton and conversational intake — done
 2. Google sign-in with per-user sessions — done
 3. Skill-gap analysis with user corrections — done
 4. Knowledge base + ranked resources — done
 5. Resource approval, scheduler agent and roadmap with Markdown export — done
-6. Live web search + refinement chat (LangGraph) — built, in testing
+6. Live web search + refinement chat (LangGraph) — done
+7. Design system and app shell (dark theme, sidebar, Home page, restyled pages) — built, in testing
+
+Milestone 7 is frontend only. The look follows `docs/mockups/`; parts of the mockups that belong to later
+milestones (resume upload, filters, Save / Start / Complete, task checkboxes and dates, PDF export, View Demo)
+are not built yet. Dashboard, Progress Review, Job Match and Resume Optimizer are placeholders in the sidebar.
 
 ## Google sign-in setup (once)
 
@@ -93,14 +99,17 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
 
 ## Try it
 
-1. Start both servers, open http://localhost:5173 and click **Sign in with Google**.
+1. Start both servers and open http://localhost:5173. On the Home page click **Start Assessment**, then
+   **Sign in with Google**; you land on **Intake**. The sidebar (a **Menu** button on a phone) moves between
+   pages and shows your profile, **Start over** and **Sign out**.
 2. Chat through the five inputs (try an invalid answer like "50 hours/week" to see follow-ups).
-3. Review the profile card, edit if needed, click **Confirm**.
-4. Click **Continue to Skill Gaps**. The analysis starts automatically and takes 20–40 seconds.
-5. Review strengths (marked *Assumed* or *You said*), gaps and domain AI use cases. Correct anything with
-   **I don't have this** / **I already know this** or a free-text note, then click **Update analysis**.
-   The plan covers at most 8 gaps that fit your hours (weekly hours × 26); the rest are listed under
-   **Later / optional**, where **Add to my plan** swaps one in on the next update.
+3. Review the profile summary, edit if needed, click **Confirm**.
+4. Click **Continue to Skill Analysis**. The analysis starts automatically and takes 20–40 seconds.
+5. Review existing skills (grouped *You said* and *Assumed*; **Why these skills** shows the reasoning),
+   missing skills, the gap table and domain AI use cases. Correct anything with the **×** on a skill
+   ("I don't have this"), **I already know this** on a gap or a free-text note, then click
+   **Update analysis**. The plan covers at most 8 gaps that fit your hours (weekly hours × 26); the rest are
+   listed under **Later / optional**, where **Add to my plan** swaps one in on the next update.
 6. Click **Confirm skills**. You go to **Resources**, where the list is built right away (about 30–90 seconds:
    curated library, live web search, link checks, ranking).
 7. Review the resources for each gap, highest priority first: up to four each, mixing courses, papers and
@@ -113,11 +122,12 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
 9. Review the roadmap: three phases, six collapsible months with a theme and a highlighted milestone, weekly
    tasks with links to your approved resources, and a portfolio project per phase from your industry. The
    summary shows planned hours against your budget (weekly hours × 26 weeks); no week goes over your weekly
-   hours. Approved resources that did not fit are listed at the bottom. Click **Download Markdown** to export.
+   hours. Approved resources that did not fit are listed at the bottom. Click **Download Plan** to export it
+   as Markdown.
 10. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
     resources, approval and roadmap reload. A different Google account starts empty. Editing the profile marks
     everything after it out of date: re-confirm the skills, **Rebuild the list**, approve it again, then
-    **Rebuild** the roadmap. Refining the list after approval asks you to approve again, and the new approval
+    **Regenerate Roadmap**. Refining the list after approval asks you to approve again, and the new approval
     marks the roadmap out of date. **Start over** also clears the refinement chat.
 
 If roadmap generation fails, the backend log says why: each rejected attempt is logged with the rule it broke,

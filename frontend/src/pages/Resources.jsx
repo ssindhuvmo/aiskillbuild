@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import Markdown from "react-markdown";
 import { Link, useNavigate } from "react-router-dom";
 import { approveResources, getResources, removeResource, searchResources, streamChat } from "../api.js";
+import Button from "../components/Button.jsx";
+import Card from "../components/Card.jsx";
+import Chat from "../components/Chat.jsx";
+import Notice from "../components/Notice.jsx";
+import PageHeader from "../components/PageHeader.jsx";
 import Progress from "../components/Progress.jsx";
 import ResourceCard from "../components/ResourceCard.jsx";
 
 const WEEKS = 26; // roadmap length; the backend enforces the real budget (scheduler/budget.py)
+const PRIORITY_LABEL = { high: "High priority", medium: "Medium priority", low: "Low priority" };
+const SUBTITLE = "Picked for your skill gaps, your level and your industry.";
 
 const GREETING =
   "Here is your list. Tell me what to change — for example “I prefer free ones”, “add more hands-on projects” or “I already know PyTorch”. To drop a single resource, use its Remove button. When you're happy with the list, approve it.";
@@ -26,10 +32,10 @@ export default function Resources() {
   const [running, setRunning] = useState(false);
   const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(""); // from the buttons
+  const [chatError, setChatError] = useState("");
   const [loadError, setLoadError] = useState("");
   const autoRan = useRef(false);
-  const bottom = useRef(null);
   const navigate = useNavigate();
 
   function load(s) {
@@ -40,6 +46,7 @@ export default function Resources() {
   async function run() {
     setRunning(true);
     setError("");
+    setChatError("");
     try {
       load(await searchResources());
     } catch (e) {
@@ -67,28 +74,29 @@ export default function Resources() {
     };
   }, []);
 
-  useEffect(() => {
-    // Scroll inside the chat log only, so the page doesn't jump away from the list.
-    bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [messages]);
+  const plain = (children) => (
+    <>
+      <PageHeader title="Resources" subtitle={SUBTITLE} />
+      {children}
+    </>
+  );
 
-  if (loadError) return <main className="card"><p className="error">{loadError}</p></main>;
-  if (!state) return <main className="card"><p>Loading…</p></main>;
-  if (running) return <Progress messages={PROGRESS} note="This usually takes 30–90 seconds." interval={9000} />;
+  if (loadError) return plain(<Card><p className="error" role="alert">{loadError}</p></Card>);
+  if (!state) return plain(<Card><p>Loading…</p></Card>);
+  if (running) return plain(<Progress messages={PROGRESS} note="This usually takes 30–90 seconds." interval={9000} />);
 
   const { profile, resources } = state;
 
   if (state.status === "none") {
-    return (
-      <main className="card">
-        <h2>Resources</h2>
-        {error && <p className="error">{error}</p>}
+    return plain(
+      <Card>
+        {error && <p className="error" role="alert">{error}</p>}
         {state.gaps_confirmed ? (
-          <button onClick={run}>Find resources</button>
+          <div className="row"><Button onClick={run}>Find resources</Button></div>
         ) : (
-          <p>Confirm your skills on the <Link to="/gaps">Skill Gaps</Link> step first, then come back here.</p>
+          <p>Confirm your skills on the <Link to="/gaps">Skill Analysis</Link> step first, then come back here.</p>
         )}
-      </main>
+      </Card>
     );
   }
 
@@ -98,12 +106,10 @@ export default function Resources() {
   const budget = profile.hours_per_week * WEEKS;
   const approved = state.approved_ids !== null && !state.approval_stale;
 
-  async function send(e) {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || sending) return;
+  async function send(text) {
+    if (sending) return;
     setInput("");
-    setError("");
+    setChatError("");
     setSending(true);
     setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
     let failed = false;
@@ -118,7 +124,7 @@ export default function Resources() {
       onState: (evt) => !failed && load(evt.resources), // the saved chat replaces the optimistic one
       onError: (msg) => {
         failed = true;
-        setError(msg);
+        setChatError(msg);
         setInput(text); // nothing was saved: let the user retry
         setMessages((m) => m.slice(0, -2));
       },
@@ -155,110 +161,92 @@ export default function Resources() {
   const shown = [{ role: "assistant", content: GREETING }, ...messages];
 
   return (
-    <main className="gaps">
+    <>
+      <PageHeader
+        title="Resources"
+        subtitle={SUBTITLE}
+        actions={
+          <>
+            <span className="header-stat">{items.length} resources · {hours} h of your {budget} h</span>
+            <Button onClick={approve} disabled={busy || sending || state.stale || items.length === 0 || approved}>
+              {approved ? "Approved ✓" : "Approve list"}
+            </Button>
+          </>
+        }
+      />
+
       {state.stale && (
-        <div className="card banner">
+        <Notice>
           {state.gaps_confirmed ? (
             <>
-              This list is out of date. <button className="link" onClick={run}>Rebuild the list</button> to update it
+              This list is out of date. <Button variant="text" onClick={run}>Rebuild the list</Button> to update it
               and start refining.
             </>
           ) : (
             <>
-              Your profile or skill gaps changed. Confirm them on the <Link to="/gaps">Skill Gaps</Link> step, then
+              Your profile or skill gaps changed. Confirm them on the <Link to="/gaps">Skill Analysis</Link> step, then
               rebuild this list.
             </>
           )}
-        </div>
+        </Notice>
       )}
-      {state.notice && <div className="card banner">{state.notice}</div>}
+      {state.notice && <Notice>{state.notice}</Notice>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {approved && <p className="ok">List approved. See your <Link to="/roadmap">roadmap</Link>.</p>}
+      {state.approval_stale && !state.stale && (
+        <p className="muted">This list changed since you last approved it. Approve it again to update your roadmap.</p>
+      )}
 
-      <section className="card">
-        <h2>Learning resources for {profile.target_role}</h2>
-        <p>
-          {items.length} resources ({items.length - fromWeb} from our curated library, {fromWeb} found on the web),
-          ranked for each skill gap by how well they match the skill, your AI experience ({profile.ai_experience}),
-          your industry ({profile.domain}) and the time they take. Remove what you don't want, use the chat for
-          anything else, then approve the list to build your roadmap.
-        </p>
-      </section>
+      <p className="muted">
+        {items.length - fromWeb} from our curated library, {fromWeb} found on the web, ranked for each skill gap by
+        how well they match the skill, your AI experience ({profile.ai_experience}), your industry ({profile.domain})
+        and the time they take. Your roadmap has {budget} hours ({profile.hours_per_week} hrs/week × {WEEKS} weeks).
+        {hours > budget &&
+          " This list is more than fits: the roadmap will schedule the most important parts and list what it left out, or you can ask to remove a few resources."}
+      </p>
 
-      <div className="refine">
-        <div className="gaps">
+      <div className="split">
+        <div className="split-main stack">
           {resources.gaps.map(({ gap, resources: list, note }) => (
-            <section key={gap.skill} className="card">
-              <div className="skill-head">
-                <h2 className="inline">{gap.skill}</h2>
-                <span className={`tag prio-${gap.priority}`}>{gap.priority}</span>
-                <span className="tag">about {gap.effort_hours} h</span>
-                {gap.domain_specific && <span className="tag domain">{profile.domain}</span>}
+            <section key={gap.skill} className="stack-tight">
+              <div className="gap-head">
+                <h2>{gap.skill}</h2>
+                <span className={`prio-${gap.priority}`}>{PRIORITY_LABEL[gap.priority]}</span>
+                <span className="muted">about {gap.effort_hours} h to close</span>
+                {gap.domain_specific && <span className="pill">{profile.domain}</span>}
               </div>
               {note ? (
                 <p className="muted">{note}</p>
               ) : (
-                <ul className="skills resources">
-                  {list.map((item) => (
-                    <ResourceCard
-                      key={item.resource.id}
-                      item={item}
-                      profile={profile}
-                      onRemove={remove}
-                      disabled={busy || sending || state.stale}
-                    />
-                  ))}
-                </ul>
+                list.map((item) => (
+                  <ResourceCard
+                    key={item.resource.id}
+                    item={item}
+                    profile={profile}
+                    onRemove={remove}
+                    disabled={busy || sending || state.stale}
+                  />
+                ))
               )}
             </section>
           ))}
         </div>
 
-        <aside className="card chat refine-chat">
-          <h2>Refine your list</h2>
-          <div className="log">
-            {shown.map((m, i) => (
-              <div key={i} className={`msg ${m.role}`}>
-                {m.role === "assistant" && m.content ? (
-                  // react-markdown escapes raw HTML by default (no rehype-raw), so this stays safe.
-                  <Markdown>{m.content}</Markdown>
-                ) : (
-                  m.content || (sending ? "Working on it…" : "")
-                )}
-              </div>
-            ))}
-            <div ref={bottom} />
-          </div>
-          {error && <p className="error">{error}</p>}
-          <form onSubmit={send}>
-            <input
-              value={input}
-              disabled={sending || state.stale}
-              placeholder="What should change?"
-              onChange={(e) => setInput(e.target.value)}
-            />
-            <button type="submit" disabled={sending || state.stale || !input.trim()}>{sending ? "…" : "Send"}</button>
-          </form>
-
-          <div className="approve">
-            <p>
-              <strong>{items.length} resources</strong>, about <strong>{hours} hours</strong>. Your roadmap has{" "}
-              {budget} hours ({profile.hours_per_week} hrs/week × {WEEKS} weeks).
-            </p>
-            {hours > budget && (
-              <p className="muted">
-                That is more than fits. The roadmap will schedule the most important parts and list what it left out,
-                or you can ask me to remove a few resources.
-              </p>
-            )}
-            <button onClick={approve} disabled={busy || sending || state.stale || items.length === 0 || approved}>
-              {approved ? "Approved ✓" : "Approve list"}
-            </button>
-            {approved && <p className="ok">List approved. See your <Link to="/roadmap">roadmap</Link>.</p>}
-            {state.approval_stale && !state.stale && (
-              <p className="muted">This list changed since you last approved it. Approve it again to update your roadmap.</p>
-            )}
-          </div>
-        </aside>
+        <Card as="aside" title="Refine your list" aria-label="Refine your list" className="split-side sticky chat-compact">
+          <Chat
+            messages={shown}
+            sending={sending}
+            waitingText="Working on it…"
+            value={input}
+            onChange={setInput}
+            onSend={send}
+            disabled={state.stale}
+            label="Ask for a change"
+            placeholder="Ask for a change…"
+            error={chatError}
+          />
+        </Card>
       </div>
-    </main>
+    </>
   );
 }

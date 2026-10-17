@@ -1,0 +1,59 @@
+/* AI Career Strategist design tokens. Copied unchanged from docs/mockups/design-tokens.css
+   (the source; Vite cannot serve files outside frontend/). Colors follow the PRD (section 4).
+   Every other stylesheet uses these variables; hex values live only in this file. */
+
+:root {
+  /* Surfaces */
+  --color-bg: #0B1120;            /* page background (PRD) */
+  --color-sidebar: #0F172A;       /* sidebar */
+  --color-surface: #1E293B;       /* cards (PRD secondary) */
+  --color-border: #334155;        /* card borders, dividers, chart grid */
+  --color-border-strong: #475569; /* secondary buttons, inputs, chips */
+
+  /* Brand */
+  --color-primary: #00B5FF;       /* primary buttons, active icon, chart series (PRD) */
+  --color-accent: #38BDF8;        /* links, numbered steps, small labels (PRD) */
+  --color-accent-hover: #7DD3FC;
+  --color-on-primary: #0B1120;    /* text on primary buttons: white on #00B5FF fails contrast */
+
+  /* Text */
+  --color-text-strong: #FFFFFF;   /* headings, values */
+  --color-text: #CBD5E1;          /* body */
+  --color-text-soft: #E2E8F0;     /* list items on cards */
+  --color-text-muted: #94A3B8;    /* labels, captions */
+
+  /* Tags and status */
+  --tag-skill-bg: #12344D;        /* existing skills, selected chips, "added" highlight */
+  --tag-skill-text: #BAE6FD;
+  --tag-gap-bg: #3D2E0A;          /* missing skills, high priority */
+  --tag-gap-text: #FDE68A;
+  --tag-done-bg: #0F3B2E;         /* complete */
+  --tag-done-text: #A7F3D0;
+  --color-success: #6EE7B7;       /* "on track", done dates */
+
+  /* Type */
+  --font-display: 'Sora', sans-serif;          /* headings and large numbers */
+  --font-body: 'IBM Plex Sans', sans-serif;    /* everything else */
+  --text-h1: 28px;    /* page title */
+  --text-h2: 17px;    /* card title */
+  --text-body: 16px;
+  --text-small: 14px;
+  --text-label: 13px;
+  --text-metric: 36px;
+
+  /* Shape and spacing */
+  --radius-card: 16px;
+  --radius-control: 10px;
+  --radius-pill: 999px;
+  --space-card: 24px;   /* card padding */
+  --space-gap: 20px;    /* gap between cards */
+  --space-page-x: 40px; /* main content side padding on desktop */
+  --control-min-height: 44px; /* every button, link-button and input */
+  --sidebar-width: 232px;
+}
+
+/* App additions: states the mockups do not cover. */
+:root {
+  --color-danger: #FCA5A5;              /* error text, destructive button */
+  --color-overlay: rgba(11, 17, 32, .75); /* behind dialogs */
+}

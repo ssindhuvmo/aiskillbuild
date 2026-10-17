@@ -19,12 +19,14 @@ milestones; `README.md` has setup steps. Build only the current milestone.
 - `backend/config/domains.json` — supported domains (edit here, not in code).
 - `backend/data/knowledge_base.json` — curated resources + skill-tag vocabulary (edit here, not in code).
 - `backend/scripts/check_kb_links.py` — live check of every knowledge-base URL (network; not in pytest).
-- `frontend/src/` — `App.jsx` (auth gate, header, routes), `api.js` (all fetch calls), `pages/`, `components/`.
+- `frontend/src/` — `App.jsx` (auth gate, shell, routes), `api.js` (all fetch calls), `pages/`, `components/`,
+  `styles/tokens.css` + `styles.css` (see "Design system and app shell").
+- `docs/` — the BRD and PRD that `SPEC.md` is derived from, and `docs/mockups/` (the visual reference).
 
 ## Milestones
 Numbered in `SPEC.md`: 1 intake, 2 Google sign-in, 3 skill gaps, 4 knowledge base + ranking, 5 resource approval +
-scheduler + roadmap, 6 live web search + refinement (LangGraph). Build one at a time and stop for testing after
-each.
+scheduler + roadmap, 6 live web search + refinement (LangGraph), 7 design system and app shell; 8–14 are listed
+there. Build one at a time and stop for testing after each.
 
 ## Orchestration decision: LangGraph for course search only
 - The course search agent and conversational refinement (flow steps 4–5) are one LangGraph graph in
@@ -154,6 +156,29 @@ each.
   missing/stale, 422 empty list). `ResourceState` carries `messages` and `notice`; `approval_stale` is also
   true when the list no longer matches the approved ids.
 - One prompt file with `# web_search`, `# interpret` and `# explain` sections (`web.section(name)`).
+
+## Design system and app shell (Milestone 7)
+- Match the look of `docs/mockups/` but never copy their inline styles or sample data. Mockup features that
+  belong to a later milestone are built in that milestone, not earlier.
+- `styles/tokens.css` is a copy of `docs/mockups/design-tokens.css` (plus `--color-danger` and
+  `--color-overlay`) and the only place with hex values; `styles.css` and components use the variables.
+  Inline `style` is only for computed widths (`ProgressBar`).
+- Layout is wrapping flex rows (`.split`, `.card-row`), so pages fit 390 px without sideways scrolling; wide
+  tables go in `.table-scroll`. Under 800 px the sidebar becomes a top bar with a Menu button.
+- Accessibility rules from the mockups: real buttons, links and labels, 44 px controls
+  (`--control-min-height`), dark text on primary buttons, `aria-current` on the active nav item (from
+  `NavLink`), `aria-pressed` on chips, `role="alert"` on error text, visible `:focus-visible` outlines.
+- Components: `Sidebar`, `PageHeader`, `Card`, `Button` (`variant`; `to` makes it a link), `SkillBadge`,
+  `FilterChip`, `MetricCard`, `ProgressBar`, `Chat` (used by Intake and Resources; the page owns messages
+  and input), `Timeline` (`Phase`, `Month`, `Week`, `TaskRow`, `Milestone`), `Notice`, `ConfirmDialog`,
+  `Icon` / `Logo`, plus `ProfileSummary` (the Profile Card), `ResourceCard` and `Progress`. Reuse these
+  before adding markup to a page.
+- `App.jsx`: signed out, every path shows `pages/Home.jsx`; signing in on `/` goes to `/intake`. Signed in,
+  `/` is Home and every other route renders inside `Shell` (sidebar + `<main>`), so pages return fragments,
+  not `<main>`. Sidebar pages that are not built yet use `pages/ComingSoon.jsx`.
+- `profileContext.js` holds the profile for the sidebar card: `App` loads it with `getIntake()` and `Intake`
+  updates it on every profile change. No endpoint exists just for the shell.
+- There are no frontend tests; check with `npm run build` and in the browser at desktop and 390 px widths.
 
 ## Conventions
 - Secrets live only in `backend/.env`; `frontend/.env` holds only `VITE_GOOGLE_CLIENT_ID`. Both are gitignored;

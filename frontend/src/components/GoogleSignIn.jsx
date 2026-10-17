@@ -39,7 +39,7 @@ export default function GoogleSignIn({ onCredential }) {
           client_id: CLIENT_ID,
           callback: (resp) => onCredential(resp.credential),
         });
-        google.accounts.id.renderButton(el.current, { theme: "outline", size: "large", text: "signin_with" });
+        google.accounts.id.renderButton(el.current, { theme: "filled_black", size: "large", text: "signin_with" });
       })
       .catch((e) => !cancelled && setError(e.message));
     return () => {
@@ -50,7 +50,7 @@ export default function GoogleSignIn({ onCredential }) {
   return (
     <>
       <div ref={el} className="gsi-button" />
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
     </>
   );
 }

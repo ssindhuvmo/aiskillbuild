@@ -8,10 +8,10 @@ export default function Progress({ messages, note, interval = 6000 }) {
     return () => clearInterval(t);
   }, [messages.length, interval]);
   return (
-    <main className="card progress" aria-live="polite">
+    <div className="card progress" aria-live="polite">
       <div className="bar"><span /></div>
       <p className="progress-msg">{messages[i]}</p>
       <p className="muted">{note}</p>
-    </main>
+    </div>
   );
 }

@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AI_EXPERIENCE } from "../aiExperience.js";
 import { confirmProfile, getDomains, updateProfile } from "../api.js";
+import Button from "./Button.jsx";
+import Card from "./Card.jsx";
 
-const LABELS = {
+// The profile fields in the order the intake chat asks for them.
+export const LABELS = {
   current_role: "Current role",
   target_role: "Target role",
   ai_experience: "AI experience",
-  domain: "Domain",
-  hours_per_week: "Hours / week",
+  domain: "Industry domain",
+  hours_per_week: "Hours per week",
 };
 
+// The Profile Card: what the intake has collected so far, with Edit and Confirm.
 export default function ProfileSummary({ profile, onChange }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
@@ -55,53 +59,52 @@ export default function ProfileSummary({ profile, onChange }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   return (
-    <aside className="card summary">
-      <h2>Your profile</h2>
+    <Card as="aside" title="Profile summary" aria-label="Profile summary" className="split-side">
       {editing ? (
-        <div className="edit">
-          <label>Current role<input value={form.current_role ?? ""} onChange={set("current_role")} /></label>
-          <label>Target role<input value={form.target_role ?? ""} onChange={set("target_role")} /></label>
-          <label>AI experience
+        <>
+          <label className="field">{LABELS.current_role}<input value={form.current_role ?? ""} onChange={set("current_role")} /></label>
+          <label className="field">{LABELS.target_role}<input value={form.target_role ?? ""} onChange={set("target_role")} /></label>
+          <label className="field">{LABELS.ai_experience}
             <select value={form.ai_experience ?? ""} onChange={set("ai_experience")}>
               <option value="">—</option>
               {AI_EXPERIENCE.map((o) => <option key={o.value} value={o.value}>{o.value} — {o.hint}</option>)}
             </select>
           </label>
-          <label>Domain
+          <label className="field">{LABELS.domain}
             <input list="domains" value={form.domain ?? ""} onChange={set("domain")} />
             <datalist id="domains">{domains.filter((d) => d !== "Other").map((d) => <option key={d} value={d} />)}</datalist>
           </label>
-          <label>Hours / week<input type="number" min="1" max="40" value={form.hours_per_week ?? ""} onChange={set("hours_per_week")} /></label>
-          {error && <p className="error">{error}</p>}
+          <label className="field">{LABELS.hours_per_week}<input type="number" min="1" max="40" value={form.hours_per_week ?? ""} onChange={set("hours_per_week")} /></label>
+          {error && <p className="error" role="alert">{error}</p>}
           <div className="row">
-            <button onClick={save} disabled={busy}>Save</button>
-            <button className="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
+            <Button onClick={save} disabled={busy}>Save</Button>
+            <Button variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
           </div>
-        </div>
+        </>
       ) : (
         <>
-          <dl>
+          <dl className="fields">
             {Object.entries(LABELS).map(([k, label]) => (
               <div key={k}>
                 <dt>{label}</dt>
-                <dd className={profile[k] == null ? "empty" : ""}>{profile[k] ?? "not collected yet"}</dd>
+                <dd className={profile[k] == null ? "empty" : ""}>{profile[k] ?? "Not collected yet"}</dd>
               </div>
             ))}
           </dl>
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error" role="alert">{error}</p>}
           <div className="row">
-            <button className="secondary" onClick={startEdit}>Edit</button>
-            <button onClick={() => run(() => confirmProfile())} disabled={!complete || profile.confirmed || busy}>
+            <Button variant="secondary" onClick={startEdit}>Edit</Button>
+            <Button onClick={() => run(() => confirmProfile())} disabled={!complete || profile.confirmed || busy}>
               {profile.confirmed ? "Confirmed ✓" : "Confirm"}
-            </button>
+            </Button>
           </div>
           {profile.confirmed && (
             <p className="ok">
-              Profile saved. <Link to="/gaps">Continue to Skill Gaps →</Link>
+              Profile saved. <Link to="/gaps">Continue to Skill Analysis →</Link>
             </p>
           )}
         </>
       )}
-    </aside>
+    </Card>
   );
 }

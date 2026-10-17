@@ -35,7 +35,7 @@ Where this spec and the source documents disagree, this spec wins.
 
 ## What stays from V1
 
-Milestones 1–6 are built. These parts are kept and extended, not rewritten:
+Milestones 1–7 are built. These parts are kept and extended, not rewritten:
 
 - Thin FastAPI routes; all logic in `backend/core/`; all database access in
   `core/repository.py`; all LLM calls through `core/llm.py` with the model set by
@@ -300,7 +300,7 @@ LangGraph remains limited to flows with a real pause-for-user loop.
 7. **Design system and app shell.** Dark theme and tokens, sidebar navigation,
    reusable components, Home page, and the existing Intake, Skill Analysis,
    Resources and Roadmap pages restyled to the PRD. Frontend only; no backend
-   behavior changes.
+   behavior changes. — done
 8. **Expanded intake, resume upload and Career Profile** (BR-01 to BR-07, BR-09 to
    BR-12). New profile fields with Alembic migrations, resume parser, gap analysis
    using resume data and the capability assessment, skill gap chart.
