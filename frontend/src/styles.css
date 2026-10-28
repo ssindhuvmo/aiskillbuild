@@ -157,6 +157,10 @@ input:disabled, select:disabled { opacity: .6; }
 .bubble-assistant p, .bubble-assistant ul, .bubble-assistant ol { margin: 0 0 8px; }
 .bubble-assistant ul, .bubble-assistant ol { padding-left: 20px; }
 .bubble-assistant code { background: var(--color-surface); padding: 1px 4px; border-radius: 4px; }
+.widget { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--color-bg); border-radius: var(--radius-card); }
+.ratings { display: flex; flex-direction: column; gap: 12px; }
+.rating { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.rating-label { flex: 0 0 140px; font-size: var(--text-small); color: var(--color-text-strong); }
 .chat-form { display: flex; flex-wrap: wrap; gap: 10px; }
 .chat-form input { flex: 1 1 160px; width: auto; min-width: 0; }
 
@@ -166,7 +170,12 @@ input:disabled, select:disabled { opacity: .6; }
 .fields dd { margin: 2px 0 0; color: var(--color-text-strong); }
 .fields dd.empty { color: var(--color-text-muted); }
 .field { display: flex; flex-direction: column; gap: 4px; }
-.field input, .field select { font-size: var(--text-body); }
+.field input, .field select, .field textarea { font-size: var(--text-body); }
+.field textarea { padding: 10px 14px; resize: vertical; }
+.field-group { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.field-group legend { padding: 0; margin-bottom: 8px; font-size: 12px; color: var(--color-text-muted); }
+.source { color: var(--color-accent); }
+.plain-list { list-style: none; margin: 0; padding: 0; }
 
 /* --- Tables and lists ----------------------------------------------------------------- */
 .table-scroll { overflow-x: auto; }

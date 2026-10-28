@@ -5,6 +5,7 @@ import pytest
 
 from core.agents.intake import agent
 from tests.conftest import login
+from tests.test_gap_analysis import CAPABILITIES
 
 
 class FakeStream:
@@ -16,6 +17,7 @@ class FakeStream:
                 SimpleNamespace(
                     type="tool_use",
                     id="t1",
+                    name="record_profile",
                     input=tool_input,
                     model_dump=lambda: {"type": "tool_use", "id": "t1", "name": "record_profile", "input": tool_input},
                 )
@@ -64,8 +66,8 @@ def test_edit_and_confirm(client):
     assert client.put("/api/profile", json={"hours_per_week": 99}).status_code == 422
     assert client.post("/api/profile/confirm").status_code == 422  # incomplete
     full = dict(
-        current_role="Data Analyst", target_role="Data Scientist", ai_experience="None",
-        domain="Healthcare", hours_per_week=5,
+        current_role="Data Analyst", target_role="Data Scientist", years_experience=3,
+        domain="Healthcare", hours_per_week=5, capabilities=CAPABILITIES,
     )
     assert client.put("/api/profile", json=full).status_code == 200
     assert client.post("/api/profile/confirm").json()["confirmed"] is True

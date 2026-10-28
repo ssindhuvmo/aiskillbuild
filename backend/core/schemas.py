@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.agents.course_search.schemas import ResourceList
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis
@@ -17,24 +17,54 @@ class GoogleLoginIn(BaseModel):
     credential: str  # the Google ID token from Google Identity Services
 
 
+class Step(BaseModel):
+    id: str
+    label: str
+    done: bool
+
+
 class ProfileOut(BaseModel):
+    """The Career Profile as the frontend sees it."""
+
     current_role: str | None = None
     target_role: str | None = None
-    ai_experience: str | None = None
+    years_experience: int | None = None
     domain: str | None = None
     hours_per_week: int | None = None
+    capabilities: dict[str, str] = {}
+    learning_preferences: list[str] | None = None  # None = not asked yet
+    constraints: dict | None = None  # None = not asked yet, {} = none
+    additional_context: str | None = None  # None = not asked yet, "" = skipped
+    resume_skipped: bool = False
+    resume_status: Literal["review", "reviewed"] | None = None  # None = no resume uploaded
+    field_sources: dict[str, str] = {}  # {"current_role": "resume"}: shown as "from resume"
+    ai_level: str | None = None  # derived from the Machine Learning and AI / LLMs ratings
     confirmed: bool = False
-    missing: list[str] = []
+    missing: list[str] = []  # required fields still missing
+    steps: list[Step] = []  # intake steps in asking order
+    next_step: str | None = None
 
 
 class ProfileUpdate(BaseModel):
-    """Partial edit from the summary card. Every provided field is validated."""
+    """Partial edit from the profile card or an intake widget. Every provided field is validated."""
 
     current_role: str | None = None
     target_role: str | None = None
-    ai_experience: str | None = None
+    years_experience: int | str | None = None
     domain: str | None = None
     hours_per_week: int | str | None = None
+    capabilities: dict[str, str] | None = None  # merged into the saved ratings
+    learning_preferences: list[str] | None = None
+    constraints: dict | None = None
+    additional_context: str | None = None
+    skip: list[str] = []  # steps to mark answered without a value: resume, preferences, constraints, context
+
+
+class RoleSuggestion(BaseModel):
+    """One of the 2-3 roles the intake suggests when the user asks for help choosing."""
+
+    role: str = Field(min_length=3, max_length=100)
+    reason: str = Field(min_length=1, max_length=300)
 
 
 class ChatMessage(BaseModel):
@@ -49,6 +79,7 @@ class ChatIn(BaseModel):
 class IntakeState(BaseModel):
     messages: list[ChatMessage]
     profile: ProfileOut
+    suggestions: list[RoleSuggestion] = []  # roles offered after "help me choose", until one is picked
 
 
 class GapState(BaseModel):

@@ -8,10 +8,14 @@ from tests.conftest import login
 from tests.test_gap_analysis import FakeClient, analysis, confirmed_user
 
 
+# Gaps the knowledge base covers above the relevance gate (deep learning: several; PCI-DSS: the FinTech guide).
+COVERED = (("Deep learning", 40), ("PCI-DSS", 10))
+
+
 @pytest.fixture()
 def fake_gaps(monkeypatch):
     def install(*replies):
-        monkeypatch.setattr(gap_agent, "get_client", lambda: FakeClient(replies or [analysis()]))
+        monkeypatch.setattr(gap_agent, "get_client", lambda: FakeClient(replies or [analysis(gaps=COVERED)]))
 
     return install
 
@@ -40,7 +44,7 @@ def test_search_saves_ranked_list_per_gap(anon, fake_gaps):
     state = client.post("/api/resources/search").json()
     assert state["status"] == "ready" and not state["stale"]
     gaps = state["resources"]["gaps"]
-    assert [g["gap"]["skill"] for g in gaps] == ["Machine learning basics", "PCI-DSS for ML"]
+    assert [g["gap"]["skill"] for g in gaps] == ["Deep learning", "PCI-DSS"]
     ml, pci = gaps
     assert 1 <= len(ml["resources"]) <= 4
     assert pci["resources"][0]["resource"]["id"] == "pci-dss-library"  # the FinTech compliance resource

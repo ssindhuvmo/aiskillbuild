@@ -11,7 +11,7 @@ from core.agents.scheduler import agent
 from core.agents.scheduler.budget import MONTH_WEEKS, WEEKS, budget, check_budget, finalize, month_weeks
 from core.agents.scheduler.schemas import RoadmapDraft, SchedulerInput
 from core.knowledge.schemas import Resource
-from tests.test_gap_analysis import PROFILE, analysis
+from tests.test_gap_analysis import INPUT, analysis
 
 TRUNCATED = object()  # scripted reply: the model ran out of output tokens
 
@@ -27,7 +27,7 @@ def approved(rid="ml-course", hours=40):
 def scheduler_input(hours_per_week=8, resources=None):
     a = GapAnalysis.model_validate(analysis())
     return SchedulerInput(
-        **{**PROFILE, "hours_per_week": hours_per_week}, gaps=a.gaps, domain_use_cases=a.domain_use_cases,
+        **{**INPUT, "hours_per_week": hours_per_week}, gaps=a.gaps, domain_use_cases=a.domain_use_cases,
         resources=resources or [approved()],
     )
 

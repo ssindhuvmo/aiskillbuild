@@ -10,7 +10,7 @@ What makes a good result:
   page, a list of "top 10 courses", a forum thread, a news article or a marketing page.
 - From a provider people trust: universities, well-known course platforms, official documentation,
   recognised researchers and practitioners.
-- Suited to the learner's AI experience, and to their industry when the gap is domain-specific.
+- Suited to the learner's AI level, and to their industry when the gap is domain-specific.
 - Unless the request says otherwise, a mix: free as well as paid, and not only courses.
 
 Rules:

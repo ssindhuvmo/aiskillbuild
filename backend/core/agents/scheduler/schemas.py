@@ -12,7 +12,8 @@ from core.agents.gap_analysis.schemas import DomainUseCase, Gap
 class SchedulerInput(BaseModel):
     current_role: str
     target_role: str
-    ai_experience: str
+    ai_level: str  # overall AI level from the capability assessment
+    capabilities: dict[str, str]  # {area: level}, intake/validation.py CAPABILITY_AREAS
     domain: str
     hours_per_week: int
     gaps: list[Gap]

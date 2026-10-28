@@ -1,18 +1,42 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AI_EXPERIENCE } from "../aiExperience.js";
+import { CAPABILITY_AREAS, describeConstraints, describePreferences, ratedCount } from "../capabilities.js";
 import { confirmProfile, getDomains, updateProfile } from "../api.js";
 import Button from "./Button.jsx";
 import Card from "./Card.jsx";
+import { CapabilityRatings, cleanConstraints, ConstraintsInput, PreferenceChips } from "./ProfileInputs.jsx";
 
-// The profile fields in the order the intake chat asks for them.
-export const LABELS = {
-  current_role: "Current role",
-  target_role: "Target role",
-  ai_experience: "AI experience",
-  domain: "Industry domain",
-  hours_per_week: "Hours per week",
-};
+const AREAS = Object.keys(CAPABILITY_AREAS);
+
+const RESUME = { review: "Waiting for your review", reviewed: "Reviewed" };
+
+// What the card shows for each field; `empty` is the text while it has no value.
+const ROWS = [
+  { key: "target_role", label: "Target role" },
+  { key: "current_role", label: "Current role" },
+  { key: "years_experience", label: "Experience", show: (v) => `${v} year${v === 1 ? "" : "s"}` },
+  { key: "domain", label: "Industry domain" },
+  { key: "hours_per_week", label: "Hours per week" },
+  { key: "capabilities", label: "Capability assessment" },
+  { key: "learning_preferences", label: "Learning preferences", show: describePreferences, empty: "Not asked yet" },
+  { key: "constraints", label: "Budget and constraints", show: describeConstraints, empty: "Optional" },
+  { key: "additional_context", label: "Additional context", show: (v) => v || "Nothing added", empty: "Optional" },
+];
+
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+function Capabilities({ value }) {
+  const rated = ratedCount(value);
+  if (rated === 0) return <dd className="empty">Not rated yet</dd>;
+  return (
+    <dd>
+      {rated < AREAS.length && <div className="muted">{rated} of {AREAS.length} rated</div>}
+      <ul className="plain-list">
+        {AREAS.filter((a) => value[a]).map((a) => <li key={a}>{CAPABILITY_AREAS[a]}: {value[a]}</li>)}
+      </ul>
+    </dd>
+  );
+}
 
 // The Profile Card: what the intake has collected so far, with Edit and Confirm.
 export default function ProfileSummary({ profile, onChange }) {
@@ -26,10 +50,17 @@ export default function ProfileSummary({ profile, onChange }) {
     getDomains().then((d) => setDomains(d.domains)).catch(() => {});
   }, []);
 
-  const complete = profile.missing.length === 0;
+  const reviewPending = profile.resume_status === "review";
+  const complete = profile.missing.length === 0 && !reviewPending;
 
   function startEdit() {
-    setForm({ ...profile });
+    setForm({
+      ...profile,
+      capabilities: { ...profile.capabilities },
+      learning_preferences: profile.learning_preferences ?? [],
+      constraints: { ...(profile.constraints ?? {}) },
+      additional_context: profile.additional_context ?? "",
+    });
     setError("");
     setEditing(true);
   }
@@ -50,31 +81,50 @@ export default function ProfileSummary({ profile, onChange }) {
 
   async function save() {
     const fields = {};
-    for (const k of Object.keys(LABELS)) {
+    for (const k of ["current_role", "target_role", "years_experience", "domain", "hours_per_week"]) {
       if (form[k] !== profile[k] && form[k] !== "" && form[k] != null) fields[k] = form[k];
     }
+    const caps = Object.fromEntries(AREAS.filter((a) => form.capabilities[a] !== profile.capabilities[a]).map((a) => [a, form.capabilities[a]]));
+    if (Object.keys(caps).length) fields.capabilities = caps;
+    // An optional answer left empty stays "not asked yet" rather than being saved as none.
+    if (!same(form.learning_preferences, profile.learning_preferences ?? [])) fields.learning_preferences = form.learning_preferences;
+    const constraints = cleanConstraints(form.constraints);
+    if (!same(constraints, profile.constraints ?? {})) fields.constraints = constraints;
+    const context = form.additional_context.trim();
+    if (context !== (profile.additional_context ?? "")) fields.additional_context = context;
     if (Object.keys(fields).length === 0 || (await run(() => updateProfile(fields)))) setEditing(false);
   }
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const fromResume = (k) => profile.field_sources[k] === "resume" && <span className="source"> · from resume</span>;
 
   return (
     <Card as="aside" title="Profile summary" aria-label="Profile summary" className="split-side">
       {editing ? (
         <>
-          <label className="field">{LABELS.current_role}<input value={form.current_role ?? ""} onChange={set("current_role")} /></label>
-          <label className="field">{LABELS.target_role}<input value={form.target_role ?? ""} onChange={set("target_role")} /></label>
-          <label className="field">{LABELS.ai_experience}
-            <select value={form.ai_experience ?? ""} onChange={set("ai_experience")}>
-              <option value="">—</option>
-              {AI_EXPERIENCE.map((o) => <option key={o.value} value={o.value}>{o.value} — {o.hint}</option>)}
-            </select>
-          </label>
-          <label className="field">{LABELS.domain}
+          <label className="field">Target role<input value={form.target_role ?? ""} onChange={set("target_role")} /></label>
+          <label className="field">Current role<input value={form.current_role ?? ""} onChange={set("current_role")} /></label>
+          <label className="field">Years of experience<input type="number" min="0" max="50" value={form.years_experience ?? ""} onChange={set("years_experience")} /></label>
+          <label className="field">Industry domain
             <input list="domains" value={form.domain ?? ""} onChange={set("domain")} />
             <datalist id="domains">{domains.filter((d) => d !== "Other").map((d) => <option key={d} value={d} />)}</datalist>
           </label>
-          <label className="field">{LABELS.hours_per_week}<input type="number" min="1" max="40" value={form.hours_per_week ?? ""} onChange={set("hours_per_week")} /></label>
+          <label className="field">Hours per week<input type="number" min="1" max="40" value={form.hours_per_week ?? ""} onChange={set("hours_per_week")} /></label>
+          <fieldset className="field-group">
+            <legend>Capability assessment</legend>
+            <CapabilityRatings value={form.capabilities} onRate={(a, l) => setForm({ ...form, capabilities: { ...form.capabilities, [a]: l } })} />
+          </fieldset>
+          <fieldset className="field-group">
+            <legend>Learning preferences</legend>
+            <PreferenceChips value={form.learning_preferences} onChange={(v) => setForm({ ...form, learning_preferences: v })} />
+          </fieldset>
+          <fieldset className="field-group">
+            <legend>Budget and constraints</legend>
+            <ConstraintsInput value={form.constraints} onChange={(v) => setForm({ ...form, constraints: v })} />
+          </fieldset>
+          <label className="field">Additional context
+            <textarea rows={4} maxLength={2000} value={form.additional_context} onChange={set("additional_context")} />
+          </label>
           {error && <p className="error" role="alert">{error}</p>}
           <div className="row">
             <Button onClick={save} disabled={busy}>Save</Button>
@@ -84,14 +134,25 @@ export default function ProfileSummary({ profile, onChange }) {
       ) : (
         <>
           <dl className="fields">
-            {Object.entries(LABELS).map(([k, label]) => (
-              <div key={k}>
-                <dt>{label}</dt>
-                <dd className={profile[k] == null ? "empty" : ""}>{profile[k] ?? "Not collected yet"}</dd>
+            {ROWS.map(({ key, label, show = (v) => v, empty = "Not collected yet" }) => (
+              <div key={key}>
+                <dt>{label}{fromResume(key)}</dt>
+                {key === "capabilities" ? (
+                  <Capabilities value={profile.capabilities} />
+                ) : (
+                  <dd className={profile[key] == null ? "empty" : ""}>{profile[key] == null ? empty : show(profile[key])}</dd>
+                )}
               </div>
             ))}
+            <div>
+              <dt>Resume</dt>
+              <dd className={profile.resume_status ? "" : "empty"}>
+                {RESUME[profile.resume_status] ?? (profile.resume_skipped ? "Skipped" : "Not uploaded")}
+              </dd>
+            </div>
           </dl>
           {error && <p className="error" role="alert">{error}</p>}
+          {reviewPending && <p className="muted">Finish reviewing your resume before confirming.</p>}
           <div className="row">
             <Button variant="secondary" onClick={startEdit}>Edit</Button>
             <Button onClick={() => run(() => confirmProfile())} disabled={!complete || profile.confirmed || busy}>

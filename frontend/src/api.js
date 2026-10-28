@@ -17,7 +17,7 @@ async function request(path, options) {
     try {
       const body = await res.json();
       const d = body.detail;
-      detail = typeof d === "string" ? d : d?.errors ? Object.values(d.errors).join(" ") : "";
+      detail = typeof d === "string" ? d : d?.errors ? [...new Set(Object.values(d.errors))].join(" ") : "";
     } catch {}
     throw Object.assign(new Error(detail || `Request failed (${res.status}).`), { status: res.status });
   }

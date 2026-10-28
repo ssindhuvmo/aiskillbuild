@@ -6,7 +6,7 @@ from core.agents.course_search.ranking import diversify, domain_fit, level_fit, 
 from core.agents.gap_analysis.schemas import Gap
 from core.knowledge.schemas import Candidate, Resource, SearchProfile
 
-BEGINNER = SearchProfile(ai_experience="None", domain="FinTech", hours_per_week=5)
+BEGINNER = SearchProfile(ai_level="None", domain="FinTech", hours_per_week=5)
 
 
 def res(id, level="beginner", domains=(), hours=10, format="course", cost="free", url=None):
@@ -113,8 +113,8 @@ def test_find_resources_with_any_retriever():
     shared = res("shared")
     retriever = FakeRetriever({
         "Low gap": [cand(shared, match=1.0)],
-        "High gap": [cand(shared, match=0.6), cand(res("own", format="project"))],
-        "Covered gap": [cand(res("own", format="project"), match=0.5)],
+        "High gap": [cand(shared, match=0.8), cand(res("own", format="project"))],
+        "Covered gap": [cand(res("own", format="project"), match=0.8)],
     })
     gaps = [gap("Low gap", priority="low"), gap("High gap"), gap("Covered gap", priority="medium"), gap("Unknown gap")]
     result = search.find_resources(gaps, BEGINNER, retriever=retriever)
@@ -130,14 +130,25 @@ def test_find_resources_with_any_retriever():
     assert all(limit == search.RETRIEVE_LIMIT for _, _, limit in retriever.calls)
 
 
-def test_weak_matches_are_not_shown():
+def test_relevance_gate_decides_what_is_shown_and_fit_only_ranks():
     retriever = FakeRetriever({"ML basics": [
-        cand(res("weak-relevance", domains=["FinTech"]), match=0.4),  # fits well otherwise, but off-topic
-        cand(res("low-score", level="advanced", domains=["Healthcare"], hours=200), match=0.5),
+        cand(res("off-topic", domains=["FinTech"]), match=0.6),  # fits perfectly otherwise, but below the gate
+        cand(res("poor-fit", level="advanced", domains=["Healthcare"], hours=200, format="book"), match=0.8),
         cand(res("good"), match=1.0),
     ]})
     [g] = search.find_resources([gap()], BEGINNER, retriever=retriever).gaps
-    assert [r.resource.id for r in g.resources] == ["good"]
+    assert [r.resource.id for r in g.resources] == ["good", "poor-fit"]  # poor fit ranks last but is shown
+
+
+def test_relevance_gate_needs_a_specific_tag():
+    # "PCI-DSS for ML" has the specific tag pci-dss and the broad tag machine-learning.
+    retriever = FakeRetriever({"PCI-DSS for ML": [
+        cand(res("broad-only"), match=1.0, matched_on=["machine-learning"]),
+        cand(res("pci-partial"), match=0.667, matched_on=["pci-dss"]),
+        cand(res("pci"), match=0.8, matched_on=["pci-dss"]),
+    ]})
+    [g] = search.find_resources([gap("PCI-DSS for ML")], BEGINNER, retriever=retriever).gaps
+    assert [r.resource.id for r in g.resources] == ["pci"]
 
 
 def test_per_gap_limit():

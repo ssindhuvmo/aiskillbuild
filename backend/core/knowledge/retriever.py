@@ -37,6 +37,11 @@ def extract_tags(text: str, vocabulary: dict[str, list[str]]) -> set[str]:
     }
 
 
+def gap_tags(gap: Gap, vocabulary: dict[str, list[str]]) -> set[str]:
+    # The skill name is the precise signal; the explanation is a fallback for unusual names.
+    return extract_tags(gap.skill, vocabulary) or extract_tags(gap.why_needed, vocabulary)
+
+
 class TagRetriever:
     """Matches the gap's skill name against the tag vocabulary, then scores each resource by
     the (weighted) share of the gap's tags it covers."""
@@ -46,8 +51,7 @@ class TagRetriever:
         self.broad = set(kb.broad_tags)
 
     def gap_tags(self, gap: Gap) -> set[str]:
-        # The skill name is the precise signal; the explanation is a fallback for unusual names.
-        return extract_tags(gap.skill, self.kb.tags) or extract_tags(gap.why_needed, self.kb.tags)
+        return gap_tags(gap, self.kb.tags)
 
     def _weight(self, tag: str) -> float:
         return BROAD_WEIGHT if tag in self.broad else 1.0

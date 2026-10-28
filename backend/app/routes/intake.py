@@ -29,10 +29,7 @@ def domains(_: User = Depends(current_user)):
 
 @router.get("/intake", response_model=IntakeState)
 def get_intake(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    return IntakeState(
-        messages=repository.get_messages(db, user.user_id),
-        profile=repository.get_profile(db, user.user_id),
-    )
+    return repository.get_intake_state(db, user.user_id)
 
 
 @router.post("/intake/chat")

@@ -1,6 +1,7 @@
 """The course search / refinement graph end to end through the API, with a fake LLM, a fake web
 searcher and a fake link checker (no network): build, pause, refine by chat, resume, approve."""
 import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -14,16 +15,17 @@ from core.agents.gap_analysis.schemas import Gap
 from core.agents.scheduler import agent as scheduler
 from core.knowledge.retriever import get_retriever
 from core.knowledge.schemas import Candidate, Resource, SearchProfile
-from core.models import ApprovedListRecord
+from core.models import ApprovedListRecord, WebResourceCandidate, WebSearchCache
 from tests.conftest import login
 from tests.test_gap_analysis import analysis, confirmed_user, gap
 from tests.test_resources import fake_gaps, ids_of  # noqa: F401  (fixture)
 from tests.test_scheduler_budget import FakeClient as FakeScheduler
 from tests.test_scheduler_budget import draft
 
-# The knowledge base has plenty for the first gap, one resource for the second and nothing for the third.
-ML, PCI, QUANTUM = "Machine learning basics", "PCI-DSS for ML", "Quantum widgets"
-GAPS = ((ML, 40), (QUANTUM, 10))  # so only QUANTUM is web-searched when the list is built
+# The knowledge base has plenty for the first gap, none passing the relevance gate for the second
+# (pci-dss is only 1 of its 1.5 tag weight) and nothing at all for the third.
+CURATED, PCI, QUANTUM = "Deep learning", "PCI-DSS for ML", "Quantum widgets"
+GAPS = ((CURATED, 40), (QUANTUM, 10))  # so only QUANTUM is web-searched when the list is built
 
 
 def found(name, **overrides):
@@ -102,18 +104,18 @@ def quantum(state):
 
 def test_build_merges_curated_and_verified_web_results(anon, fake_gaps, searcher, caplog):  # noqa: F811
     caplog.set_level("INFO", logger="core")
-    profile = SearchProfile(ai_experience="Beginner", domain="FinTech", hours_per_week=8)
+    profile = SearchProfile(ai_level="Beginner", domain="FinTech", hours_per_week=8)
     curated = get_retriever().search(Gap(**gap(PCI, 10)), profile)[0].resource
     searcher.results[PCI] = [found("dup", url=str(curated.url), title="Same page, found on the web")]
-    searcher.results[ML] = [found("unwanted")]
+    searcher.results[CURATED] = [found("unwanted")]
     searcher.link_status = {"https://example.com/dead": "fail", "https://example.com/blocked": "blocked"}
     state = ready_user(
         anon, "cg1", fake_gaps, searcher, web=[found("a"), found("dead"), found("blocked")],
-        gaps=((ML, 40), (PCI, 10), (QUANTUM, 10)),
+        gaps=((CURATED, 40), (PCI, 10), (QUANTUM, 10)),
     )
 
     assert state["status"] == "ready" and not state["stale"] and state["messages"] == [] and state["notice"] is None
-    # Only gaps the knowledge base covers thinly are searched: ML basics has plenty of curated resources.
+    # Only gaps the knowledge base covers thinly are searched: deep learning has plenty of curated resources.
     assert sorted(s for s, _ in searcher.calls) == [PCI, QUANTUM]
     assert "Web search run: 2 of 3 gaps searched" in caplog.text  # the cost of the run is logged
     assert "Web unwanted" not in [r["resource"]["title"] for g in state["resources"]["gaps"] for r in g["resources"]]
@@ -269,7 +271,7 @@ def test_web_search_failure_falls_back_to_the_curated_library(anon, fake_gaps, s
     fake_gaps(analysis(gaps=GAPS))
     anon.post("/api/gaps/analyze", json={})
     anon.post("/api/gaps/confirm")
-    searcher.results = {ML: RuntimeError("boom"), QUANTUM: RuntimeError("boom")}
+    searcher.results = {CURATED: RuntimeError("boom"), QUANTUM: RuntimeError("boom")}
     state = anon.post("/api/resources/search").json()
     assert state["status"] == "ready" and "curated library" in state["notice"]
     assert quantum(state)["resources"] == [] and len(ids_of(state)) >= 1
@@ -329,6 +331,54 @@ def test_a_list_without_a_paused_graph_must_be_rebuilt(anon, fake_gaps, searcher
     assert anon.get("/api/resources").json()["stale"] is True
     assert anon.post("/api/resources/chat", json={"message": "hi"}).status_code == 409
     assert anon.post("/api/resources/search").json()["stale"] is False
+
+
+def test_first_pass_results_are_cached_across_users_for_14_days(anon, fake_gaps, searcher, caplog):  # noqa: F811
+    caplog.set_level("INFO", logger="core")
+    ready_user(anon, "cg18", fake_gaps, searcher, web=[found("a")])
+    assert [s for s, _ in searcher.calls] == [QUANTUM]
+
+    # Another user with the same gap and level: the cached result is used, nothing is searched.
+    with TestClient(app, base_url="https://testserver") as other:
+        theirs = ready_user(other, "cg19", fake_gaps, searcher, web=[found("other")])
+    assert len(searcher.calls) == 1 and "1 from cache (Quantum widgets)" in caplog.text
+    assert [r["resource"]["title"] for r in quantum(theirs)["resources"]] == ["Web a"]
+
+    # Older than CACHE_DAYS: searched again, and the cache is refreshed.
+    with dbmod.SessionLocal() as db:
+        db.query(WebSearchCache).update({"created_at": datetime.now(timezone.utc) - timedelta(days=15)})
+        db.commit()
+    state = anon.post("/api/resources/search").json()
+    assert len(searcher.calls) == 2 and [r["resource"]["title"] for r in quantum(state)["resources"]] == ["Web other"]
+
+
+def test_first_pass_searches_at_most_four_gaps_by_priority(anon, fake_gaps, searcher):  # noqa: F811
+    confirmed_user(anon, "cg20")
+    data = analysis(gaps=[(f"Quantum widgets {n}", 5) for n in "abcdef"])
+    for g, priority in zip(data["gaps"], ["low", "medium", "high", "low", "high", "medium"]):
+        g["priority"] = priority
+    fake_gaps(data)
+    anon.post("/api/gaps/analyze", json={})
+    anon.post("/api/gaps/confirm")
+    assert anon.post("/api/resources/search").status_code == 200
+    assert [s for s, _ in searcher.calls] == [f"Quantum widgets {n}" for n in "cebf"]  # high, high, medium, medium
+
+
+def test_approved_web_resources_become_knowledge_base_candidates(anon, fake_gaps, searcher, llm):  # noqa: F811
+    a, b = web_id("https://example.com/a"), web_id("https://example.com/b")
+    ready_user(anon, "cg21", fake_gaps, searcher, web=[found("a"), found("b")])
+    anon.post("/api/resources/approve")
+    anon.post("/api/resources/approve")  # approving the same list again counts nothing new
+    with TestClient(app, base_url="https://testserver") as other:
+        ready_user(other, "cg22", fake_gaps, searcher)  # served from the cache
+        llm({"remove_ids": [b]})
+        chat(other, "remove Web b")
+        other.post("/api/resources/approve")
+    with dbmod.SessionLocal() as db:
+        rows = {r.resource_id: r for r in db.query(WebResourceCandidate).all()}
+    assert rows[a].approvals == 2 and rows[b].approvals == 1
+    assert rows[a].gaps == [QUANTUM] and rows[a].resource["url"] == "https://example.com/a"
+    assert all(r.startswith("web-") for r in rows)  # curated resources are not candidates
 
 
 def test_users_have_separate_lists_and_chats(anon, fake_gaps, searcher, llm):  # noqa: F811

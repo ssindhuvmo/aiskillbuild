@@ -21,11 +21,14 @@ class Correction(BaseModel):
 class GapInput(BaseModel):
     current_role: str
     target_role: str
-    ai_experience: str
+    years_experience: int
     domain: str
     hours_per_week: int
+    capabilities: dict[str, str]  # the user's self-ratings, {area: level}
+    ai_level: str  # derived from the Machine Learning and AI / LLMs ratings
+    additional_context: str | None = None
+    resume: dict | None = None  # the reviewed resume data, if any
     corrections: list[Correction] = []
-    # V2: resume-derived skills will be added here.
 
 
 class Strength(BaseModel):

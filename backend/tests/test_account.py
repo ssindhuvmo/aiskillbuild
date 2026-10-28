@@ -7,6 +7,7 @@ from core import db as dbmod
 from core import repository
 from core.agents.course_search.graph import get_graph
 from core.db import Base
+from core.models import Resume
 from tests.test_resources import fake_gaps  # noqa: F401  (fixture)
 from tests.test_roadmap import approved_user, fake  # noqa: F401  (fixture)
 from tests.test_scheduler_budget import draft
@@ -29,6 +30,10 @@ def full_user(client, sub, fake_gaps, fake):  # noqa: F811
     assert client.post("/api/roadmap/generate").status_code == 200
     with dbmod.SessionLocal() as db:
         repository.append_message(db, sub, "user", "hello")
+        # No upload endpoint yet (milestone 8): add the resume row directly.
+        db.add(Resume(user_id=sub, filename="cv.pdf", stored_path="", content_type="application/pdf", size=1,
+                      text="", status="reviewed"))
+        db.commit()
     counts = row_counts(sub)
     assert all(counts.values()), counts
     return client

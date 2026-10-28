@@ -13,7 +13,6 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from core import repository
-from core.agents.intake.validation import FIELDS
 from core.agents.scheduler.budget import MONTH_WEEKS, WEEKS, budget, check_budget, finalize, month_weeks
 from core.agents.scheduler.schemas import Roadmap, RoadmapDraft, SchedulerInput
 from core.llm import MODEL, get_client
@@ -42,7 +41,7 @@ class ListNotApproved(Exception):
 
 
 def _request(data: SchedulerInput, problems: list[str]) -> str:
-    profile = data.model_dump(include={"current_role", "target_role", "ai_experience", "domain"})
+    profile = data.model_dump(include={"current_role", "target_role", "ai_level", "capabilities", "domain"})
     gaps = [g.model_dump(include={"skill", "priority", "effort_hours", "domain_specific"}) for g in data.gaps]
     resources = [
         {
@@ -112,7 +111,7 @@ def run_for_user(db: Session, user_id: str) -> RoadmapState:
     if approved is None:
         raise ListNotApproved("Approve your resource list on the Resources step first.")
     data = SchedulerInput(
-        **{f: getattr(gap_state.profile, f) for f in FIELDS},
+        **{f: getattr(gap_state.profile, f) for f in repository.SCHEDULER_FIELDS},
         gaps=gap_state.analysis.gaps,
         domain_use_cases=gap_state.analysis.domain_use_cases,
         resources=approved.resources,

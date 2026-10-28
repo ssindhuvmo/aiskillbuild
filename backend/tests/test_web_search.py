@@ -11,7 +11,7 @@ from core.knowledge.schemas import Candidate, Resource, SearchProfile
 
 GAP = Gap(skill="Vector databases", category="technical", why_needed="Needed for retrieval.", priority="high",
           effort_hours=20, domain_specific=False)
-PROFILE = SearchProfile(ai_experience="Beginner", domain="FinTech", hours_per_week=8)
+PROFILE = SearchProfile(ai_level="Beginner", domain="FinTech", hours_per_week=8)
 
 
 def finding(url="https://example.com/vectors", **overrides):
@@ -59,9 +59,10 @@ def search(hint=None):
 def test_findings_become_web_candidates(fake):
     client = fake(reply(results("https://example.com/vectors"), record(finding(domain_specific=True))))
     [c] = search(hint="Free resources only.")
-    assert c.source == "web" and c.match_score == 0.8 and c.matched_on == ["Vector databases"]
+    # Tagged from its title and description with the knowledge-base vocabulary, like curated resources.
+    assert c.source == "web" and c.match_score == 0.8 and c.matched_on == ["rag"]
     assert c.resource.id == web.web_id("https://example.com/vectors") and c.resource.id.startswith("web-")
-    assert c.resource.skills == ["Vector databases"] and c.resource.domains == ["FinTech"]
+    assert c.resource.skills == ["rag"] and c.resource.domains == ["FinTech"]
     request = client.requests[0]
     assert "Vector databases" in request["messages"][0]["content"] and "Free resources only." in request["messages"][0]["content"]
     assert {t["name"] for t in request["tools"]} == {"web_search", "record_resources"}
@@ -104,6 +105,32 @@ def test_paused_turn_is_continued(fake):
     )
     assert len(search()) == 1
     assert client.requests[1]["messages"][1]["role"] == "assistant"  # the paused turn is sent back
+
+
+def test_one_search_per_gap_and_billed_usage_is_counted(fake):
+    def billed(*blocks, searches, stop_reason="tool_use"):
+        r = reply(*blocks, stop_reason=stop_reason)
+        r.usage = SimpleNamespace(input_tokens=1000, output_tokens=200, cache_read_input_tokens=None,
+                                  server_tool_use=SimpleNamespace(web_search_requests=searches))
+        return r
+
+    client = fake(
+        billed(results("https://example.com/vectors"), searches=1, stop_reason="pause_turn"),
+        billed(record(*[finding(f"https://example.com/vectors/{i}") for i in range(7)]), searches=0),
+    )
+    client.replies[1].content.insert(0, results(*[f"https://example.com/vectors/{i}" for i in range(7)]))
+    searcher = web.AnthropicWebSearcher()
+    assert len(searcher.search(GAP, PROFILE)) == web.MAX_RESULTS == 5
+    tool = next(t for t in client.requests[0]["tools"] if t["name"] == "web_search")
+    assert tool["max_uses"] == web.MAX_SEARCHES == 1
+    assert (searcher.searches, searcher.input_tokens, searcher.output_tokens) == (1, 2000, 400)
+
+
+def test_web_result_for_an_untagged_gap_matches_on_the_gap_name(fake):
+    fake(reply(results("https://example.com/vectors"), record(finding())))
+    gap = GAP.model_copy(update={"skill": "Quantum widgets", "why_needed": "Odd."})
+    [c] = web.AnthropicWebSearcher().search(gap, PROFILE)
+    assert c.matched_on == ["Quantum widgets"]
 
 
 def test_curated_entry_wins_over_the_same_url_from_the_web():

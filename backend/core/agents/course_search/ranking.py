@@ -1,6 +1,6 @@
 """Deterministic ranking of candidate resources for one gap. Pure functions: no I/O, no LLM.
 
-score = relevance (the retriever's match_score) + fit with the user's AI experience
+score = relevance (the retriever's match_score) + fit with the user's AI level
       + applicability to their industry domain + time cost relative to the gap's effort.
 """
 from core.agents.course_search.schemas import RankedResource, ScoreBreakdown
@@ -10,7 +10,7 @@ from core.knowledge.schemas import Candidate, Level, SearchProfile
 WEIGHTS = {"relevance": 0.45, "level": 0.20, "domain": 0.20, "time": 0.15}
 
 LEVELS: list[Level] = ["beginner", "intermediate", "advanced"]
-# The level each AI-experience answer is ready for.
+# The resource level each AI level is ready for.
 EXPERIENCE_LEVEL = {"None": "beginner", "Beginner": "beginner", "Intermediate": "intermediate", "Experienced": "advanced"}
 
 DOMAIN_MATCH, GENERAL, OTHER_DOMAIN = 1.0, 0.6, 0.1
@@ -20,9 +20,9 @@ FORMAT_PENALTY = 0.10
 COST_PENALTY = 0.05
 
 
-def level_fit(level: Level, ai_experience: str) -> float:
+def level_fit(level: Level, ai_level: str) -> float:
     """1 at the user's level, 0.5 one level away, 0 two levels away."""
-    target = EXPERIENCE_LEVEL.get(ai_experience, "beginner")
+    target = EXPERIENCE_LEVEL.get(ai_level, "beginner")
     distance = abs(LEVELS.index(level) - LEVELS.index(target))
     return (1.0, 0.5, 0.0)[distance]
 
@@ -42,7 +42,7 @@ def score(candidate: Candidate, gap: Gap, profile: SearchProfile) -> tuple[float
     r = candidate.resource
     breakdown = ScoreBreakdown(
         relevance=candidate.match_score,
-        level=level_fit(r.level, profile.ai_experience),
+        level=level_fit(r.level, profile.ai_level),
         domain=domain_fit(r.domains, profile.domain),
         time=time_fit(r.hours, gap.effort_hours),
     )

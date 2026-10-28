@@ -6,8 +6,8 @@ const LEVEL_FOR = { None: "beginner", Beginner: "beginner", Intermediate: "inter
 function whyThis(item, profile) {
   const { resource: r, breakdown: b, matched_on } = item;
   const parts = [`Matches ${matched_on.join(", ")}`];
-  if (b.level === 1) parts.push(`right level for ${profile.ai_experience === "None" ? "a new learner" : `${profile.ai_experience} AI experience`}`);
-  else if (r.level !== LEVEL_FOR[profile.ai_experience]) parts.push(`${r.level} level — a stretch or a refresher`);
+  if (b.level === 1) parts.push(`right level for ${profile.ai_level === "None" ? "a new learner" : `${profile.ai_level} AI level`}`);
+  else if (r.level !== LEVEL_FOR[profile.ai_level]) parts.push(`${r.level} level — a stretch or a refresher`);
   if (b.domain === 1) parts.push(`${profile.domain}-specific`);
   if (b.time < 1) parts.push("longer than this gap needs; pick the relevant parts");
   return parts.join(" · ");

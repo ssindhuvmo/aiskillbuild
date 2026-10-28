@@ -1,22 +1,20 @@
 import { useContext, useEffect, useState } from "react";
-import { AI_EXPERIENCE } from "../aiExperience.js";
 import { getIntake, streamChat } from "../api.js";
 import Card from "../components/Card.jsx";
 import Chat from "../components/Chat.jsx";
-import FilterChip from "../components/FilterChip.jsx";
+import IntakeStep from "../components/IntakeStep.jsx";
 import PageHeader from "../components/PageHeader.jsx";
-import ProfileSummary, { LABELS } from "../components/ProfileSummary.jsx";
+import ProfileSummary from "../components/ProfileSummary.jsx";
 import ProgressBar from "../components/ProgressBar.jsx";
 import { ProfileContext } from "../profileContext.js";
 
 const GREETING =
-  "Hi! I'll ask a few quick questions to build your profile: your current role, the AI role you're aiming for, your experience with AI, the industry you work in, and how many hours a week you can study. Let's start — what's your current role?";
-
-const QUESTIONS = Object.keys(LABELS).length;
+  "Hi! I'll build your Career Profile in a few short steps: your goal, your resume, your background, the hours you can study, how you rate your skills today, how you like to learn, and any constraints. Let's start: which AI role are you aiming for? If you're not sure, say so and I'll suggest a few that fit you.";
 
 export default function Intake() {
   const [messages, setMessages] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -37,6 +35,7 @@ export default function Intake() {
       .then((s) => {
         if (cancelled) return;
         setMessages(s.messages);
+        setSuggestions(s.suggestions);
         applyProfile(s.profile);
       })
       .catch((e) => !cancelled && setLoadError(e.message));
@@ -59,7 +58,10 @@ export default function Intake() {
           copy[copy.length - 1] = { ...last, content: last.content + t };
           return copy;
         }),
-      onState: (evt) => applyProfile(evt.profile),
+      onState: (evt) => {
+        applyProfile(evt.profile);
+        setSuggestions(evt.suggestions ?? []);
+      },
       onError: setError,
     });
     setMessages((m) => (m.length && m[m.length - 1].content === "" ? m.slice(0, -1) : m));
@@ -74,22 +76,24 @@ export default function Intake() {
   if (!profile) return <>{header()}<Card><p>Loading…</p></Card></>;
 
   const shown = messages.length === 0 ? [{ role: "assistant", content: GREETING }] : messages;
-  // The agent asks fields in order, so AI experience being the first missing field means
-  // the latest question is about it. Typing an answer instead still works.
-  const showExperience =
-    !sending && profile.missing[0] === "ai_experience" && shown[shown.length - 1].role === "assistant";
-  const answered = QUESTIONS - profile.missing.length;
-  const next = profile.missing.length ? `Next: ${LABELS[profile.missing[0]]}` : profile.confirmed ? "Profile confirmed" : "Ready to confirm";
+  // The agent follows next_step, so the widget for that step answers the latest question.
+  // Typing an answer instead still works.
+  const showStep = !sending && profile.next_step && shown[shown.length - 1].role === "assistant";
+  const total = profile.steps.length;
+  const answered = profile.steps.filter((st) => st.done).length;
+  const current = profile.steps.find((st) => st.id === profile.next_step);
+  const next = current ? current.label : profile.confirmed ? "Profile confirmed" : "Ready to confirm";
+  const position = current ? `Step ${answered + 1} of ${total}` : `${answered} of ${total} done`;
 
   return (
     <>
       {header(
         <div className="header-progress">
           <div className="header-progress-text">
-            <span>{answered} of {QUESTIONS} answered</span>
+            <span>{position}</span>
             <span>{next}</span>
           </div>
-          <ProgressBar value={answered} max={QUESTIONS} label="Question progress" />
+          <ProgressBar value={answered} max={total} label="Question progress" />
         </div>
       )}
       <div className="split">
@@ -104,15 +108,15 @@ export default function Intake() {
             placeholder="Type your answer…"
             error={error}
           >
-            {showExperience && (
-              <div className="chips" role="group" aria-label="AI experience">
-                {AI_EXPERIENCE.map((o) => (
-                  <FilterChip key={o.value} pressed={profile.ai_experience === o.value} onClick={() => sendText(o.value)}>
-                    <strong>{o.value}</strong>
-                    <small>{o.hint}</small>
-                  </FilterChip>
-                ))}
-              </div>
+            {showStep && (
+              <IntakeStep
+                key={profile.next_step}
+                step={profile.next_step}
+                profile={profile}
+                suggestions={suggestions}
+                onProfile={applyProfile}
+                onSend={sendText}
+              />
             )}
           </Chat>
         </Card>

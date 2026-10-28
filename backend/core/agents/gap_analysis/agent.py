@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from core import repository
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis, GapInput
-from core.agents.intake.validation import FIELDS
 from core.agents.scheduler.budget import WEEKS, budget
 from core.llm import MODEL, get_client
 from core.schemas import GapState
@@ -107,6 +106,6 @@ def run_for_user(db: Session, user_id: str, corrections: list[Correction]) -> Ga
     profile = repository.get_profile(db, user_id)  # commits, so no DB lock is held during the LLM call
     if not profile.confirmed:
         raise ProfileNotConfirmed("Confirm your profile on the Intake step first.")
-    snapshot = {f: getattr(profile, f) for f in FIELDS}
-    analysis = analyze(GapInput(**snapshot, corrections=corrections))
+    snapshot = repository.gap_inputs(db, user_id, profile)
+    analysis = analyze(GapInput(**snapshot, ai_level=profile.ai_level, corrections=corrections))
     return repository.save_gap_analysis(db, user_id, analysis, corrections, snapshot)

@@ -18,6 +18,7 @@ import json
 import logging
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from typing import TypedDict
 
 from anthropic import transform_schema
@@ -43,7 +44,8 @@ from core.repository import ValidationFailed
 log = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 3  # interpretation attempts, with the problems fed back
-MIN_CURATED = 3  # first pass: a gap with this many good knowledge-base candidates is not web-searched
+MIN_CURATED = 2  # first pass: a gap with this many knowledge-base candidates passing the gate is not web-searched
+MAX_FIRST_PASS = 4  # first pass: at most this many gaps are web-searched (cache hits don't count), by priority
 MAX_SEARCHES_PER_TURN = 4  # gaps searched again for one chat message
 SEARCH_WORKERS = 4
 PER_GAP_STEP, MAX_PER_GAP = 2, 8  # "add more" shows more resources per gap, up to a limit
@@ -129,9 +131,9 @@ def apply_preferences(
     return result
 
 
-def good(items: list[RankedResource]) -> int:
-    """How many of these pass present()'s thresholds."""
-    return sum(r.score >= search.MIN_SCORE and r.breakdown.relevance >= search.MIN_RELEVANCE for r in items)
+def good(items: list[RankedResource], gap: Gap) -> int:
+    """How many of these pass present()'s relevance gate."""
+    return sum(search.passes(r, gap) for r in items)
 
 
 def check_action(action: RefinementAction, state: SearchState) -> list[str]:
@@ -196,21 +198,40 @@ def _hint(request: dict, prefs: Preferences, titles: list[str]) -> str | None:
     return " ".join(parts) or None
 
 
+def _first_pass(state: SearchState, found: list[list[dict]]) -> tuple[list[dict], list[str]]:
+    """The first pass's searches: gaps with fewer than MIN_CURATED knowledge-base candidates passing
+    the relevance gate, highest priority first. A cached result (any user's, within CACHE_DAYS) is
+    used instead of searching; at most MAX_FIRST_PASS gaps are searched. Returns (requests, cached skills)."""
+    gaps, profile = _gaps(state), _profile(state)
+    thin = [
+        i for i, (gap, kb) in enumerate(zip(gaps, state["kb"]))
+        if good(rank([Candidate(**c) for c in kb], gap, profile), gap) < MIN_CURATED
+    ]
+    thin.sort(key=lambda i: search.PRIORITY[gaps[i].priority])  # stable: ties keep gap-analysis order
+    requests, cached = [], []
+    with SessionLocal() as db:
+        for i in thin:
+            hit = repository.get_cached_search(db, web.cache_key(gaps[i], profile), timedelta(days=web.CACHE_DAYS))
+            if hit is not None:
+                found[i] += _dump(hit)
+                cached.append(gaps[i].skill)
+            elif len(requests) < MAX_FIRST_PASS:
+                requests.append({"skill": gaps[i].skill, "cache": True})
+    return requests, cached
+
+
 def web_search(state: SearchState) -> dict:
-    """Search the web: on the first pass for the gaps the knowledge base covers thinly (fewer than
-    MIN_CURATED good candidates), later only for the gaps `apply` asked for. Each search is billed."""
+    """Search the web: on the first pass for the gaps the knowledge base covers thinly (see
+    _first_pass), later only for the gaps `apply` asked for (never cached: those carry the user's
+    request). Each search is billed."""
     gaps, profile = _gaps(state), _profile(state)
     index = {g.skill: i for i, g in enumerate(gaps)}
-    requests = state.get("search_requests")
+    found = [list(cs) for cs in state.get("web") or [[] for _ in gaps]]
+    requests, cached = state.get("search_requests"), []
     if requests is None:
-        requests = [
-            {"skill": gap.skill}
-            for gap, kb in zip(gaps, state["kb"])
-            if good(rank([Candidate(**c) for c in kb], gap, profile)) < MIN_CURATED
-        ]
+        requests, cached = _first_pass(state, found)
     prefs = Preferences(**state.get("preferences", {}))
     known = state.get("candidates") or [[] for _ in gaps]
-    found = [list(cs) for cs in state.get("web") or [[] for _ in gaps]]
     searcher = web.get_searcher()
 
     def run(request: dict) -> tuple[int, list[Candidate]]:
@@ -219,19 +240,25 @@ def web_search(state: SearchState) -> dict:
         return i, searcher.search(gaps[i], profile, _hint(request, prefs, titles))
 
     notice = None
+    requests = [r for r in requests if r["skill"] in index]
     with ThreadPoolExecutor(max_workers=SEARCH_WORKERS) as pool:
-        for future in [pool.submit(run, r) for r in requests if r["skill"] in index]:
+        for request, future in [(r, pool.submit(run, r)) for r in requests]:
             try:
                 i, candidates = future.result()
-            except Exception as exc:  # the list still works without web results
+            except Exception as exc:  # the list still works without web results (and nothing is cached)
                 log.warning("Web search failed: %r", exc)
                 notice = WEB_UNAVAILABLE + friendly_error(exc)
                 continue
             found[i] += _dump(candidates)
-    # The cost of this run: gaps searched, and the billed searches when the searcher counts them.
+            if request.get("cache"):
+                with SessionLocal() as db:
+                    repository.save_cached_search(db, web.cache_key(gaps[i], profile), candidates)
+    # The cost of this run: gaps searched, and the billed searches and tokens when the searcher counts them.
     log.info(
-        "Web search run: %d of %d gaps searched (%s), %s web searches",
-        len(requests), len(gaps), ", ".join(r["skill"] for r in requests) or "none", getattr(searcher, "searches", "n/a"),
+        "Web search run: %d of %d gaps searched (%s), %d from cache (%s), %s web searches, %s input / %s output tokens",
+        len(requests), len(gaps), ", ".join(r["skill"] for r in requests) or "none",
+        len(cached), ", ".join(cached) or "none", getattr(searcher, "searches", "n/a"),
+        getattr(searcher, "input_tokens", "n/a"), getattr(searcher, "output_tokens", "n/a"),
     )
     return {"web": found, "search_requests": [], "notice": notice}
 
@@ -459,7 +486,8 @@ def apply(state: SearchState) -> dict:
         requests += [
             {"skill": gap["skill"]}
             for gap, items in zip(state["gaps"], ranked)
-            if gap["skill"] in had and gap["skill"] not in asked and gap["skill"] not in skipped and not good(items)
+            if gap["skill"] in had and gap["skill"] not in asked and gap["skill"] not in skipped
+            and not good(items, Gap(**gap))
         ][: MAX_SEARCHES_PER_TURN - len(requests)]
 
     per_gap = state.get("per_gap", search.PER_GAP)

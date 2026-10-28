@@ -6,13 +6,13 @@ live web search before merge_dedupe and URL verification before rank.
 from core.agents.course_search.ranking import diversify, rank
 from core.agents.course_search.schemas import GapResources, RankedResource, ResourceList
 from core.agents.gap_analysis.schemas import Gap
-from core.knowledge.retriever import Retriever, get_retriever
+from core.knowledge.retriever import Retriever, gap_tags, get_retriever
 from core.knowledge.schemas import Candidate, SearchProfile
+from core.knowledge.store import load_knowledge_base
 
 PER_GAP = 4  # resources shown per gap
 RETRIEVE_LIMIT = 12  # candidates fetched per gap before ranking
-MIN_SCORE = 0.55  # weaker matches (e.g. another industry's compliance guide) are not shown
-MIN_RELEVANCE = 0.5  # a resource must cover at least half of what the gap needs, however well it fits otherwise
+MIN_RELEVANCE = 0.7  # the relevance gate; level, domain and time only rank what passes it
 PRIORITY = {"high": 0, "medium": 1, "low": 2}
 
 NO_MATCH = "No resources found for this skill yet. Ask in the chat to search for more."
@@ -21,6 +21,22 @@ COVERED_ELSEWHERE = "Covered by resources listed under other skills (see “Also
 
 def url_key(url) -> str:
     return str(url).lower().rstrip("/")
+
+
+def specific_tags(gap: Gap) -> set[str]:
+    kb = load_knowledge_base()
+    return gap_tags(gap, kb.tags) - set(kb.broad_tags)
+
+
+def passes(r: RankedResource, gap: Gap) -> bool:
+    """The relevance gate: relevance >= MIN_RELEVANCE and at least one of the gap's specific (not
+    broad) tags matched, so a resource sharing only "machine-learning" or one tag of several is
+    not shown however well it fits otherwise. A gap without specific tags can only be gated on
+    relevance (its curated matches are capped below the gate; web results carry the model's rating)."""
+    if r.breakdown.relevance < MIN_RELEVANCE:
+        return False
+    tags = specific_tags(gap)
+    return not tags or bool(tags & set(r.matched_on))
 
 
 def retrieve(gaps: list[Gap], profile: SearchProfile, retriever: Retriever) -> list[list[Candidate]]:
@@ -53,11 +69,11 @@ def merge_dedupe(candidates: list[Candidate]) -> list[Candidate]:
 
 
 def present(gaps: list[Gap], ranked: list[list[RankedResource]], per_gap: int = PER_GAP) -> ResourceList:
-    """Build the final list: gaps by priority, up to `per_gap` diverse resources each that pass
-    MIN_SCORE and MIN_RELEVANCE. A resource
+    """Build the final list: gaps by priority, up to `per_gap` diverse resources each that pass the
+    relevance gate. A resource
     that fits several gaps is shown once, under the gap it scores best for, with "also covers"."""
     order = sorted(range(len(gaps)), key=lambda i: PRIORITY[gaps[i].priority])  # stable: ties keep input order
-    ranked = [[r for r in rs if r.score >= MIN_SCORE and r.breakdown.relevance >= MIN_RELEVANCE] for rs in ranked]
+    ranked = [[r for r in rs if passes(r, gap)] for rs, gap in zip(ranked, gaps)]
 
     # The gap each resource scores best for (ties go to the higher-priority gap).
     owner: dict[str, int] = {}

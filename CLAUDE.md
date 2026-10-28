@@ -84,9 +84,11 @@ there. Build one at a time and stop for testing after each.
 - `course_search/ranking.py` (pure): score = 0.45 relevance + 0.20 level fit + 0.20 domain fit + 0.15 time fit
   (`WEIGHTS`); `diversify` penalizes repeated formats/costs to mix courses/papers/projects and free/paid.
 - `course_search/search.py`: `retrieve` → `merge_dedupe` (by URL) → `rank` → `present` (gaps by priority, ≤ 4
-  each, drops score < `MIN_SCORE` or relevance < `MIN_RELEVANCE`, a resource shown once under its best gap with
-  `also_covers`). `find_resources` chains them (tests only); the graph wraps the same functions as nodes
-  (web search before `merge_dedupe`, URL verification before `rank`). `merge_dedupe` keeps the curated entry
+  each, only resources passing the relevance gate `passes()`, a resource shown once under its best gap with
+  `also_covers`). The gate: relevance ≥ `MIN_RELEVANCE` (0.7) and at least one of the gap's specific (non-broad)
+  tags in `matched_on`; a gap with no specific tags is gated on relevance alone. Level, domain and time only rank
+  what passes; there is no minimum total score. `find_resources` chains them (tests only); the graph wraps the
+  same functions as nodes (web search before `merge_dedupe`, URL verification before `rank`). `merge_dedupe` keeps the curated entry
   when the web finds the same URL.
 - `resource_lists` table (one row per user) with a `snapshot` of the gap analysis + search profile; `stale` =
   snapshot differs or gaps no longer confirmed. Search needs confirmed, current gaps (409 otherwise). Every run
@@ -143,10 +145,23 @@ there. Build one at a time and stop for testing after each.
   `ranking.rank` (cost is a filter, favoured formats get `FAVOUR_BOOST`), so `ranking.py` stays untouched.
   `present` saves via `save_resource_list` and streams the explanation (plain `summary` if the LLM fails).
   "I already know X" hides the gap's resources; it never changes the gap analysis.
-- Web search cost: the first pass searches only gaps with fewer than `MIN_CURATED` (3) good knowledge-base
-  candidates (`good()` = passes `present`'s thresholds), `max_uses` 2 per gap; later passes search only what
-  `apply` requests. Every run logs `Web search run: N of M gaps searched (...), K web searches` at INFO
-  (`app/main.py` adds a handler for the `core` logger; K comes from the API's usage).
+- Web search cost: the first pass (`_first_pass`) looks at gaps with fewer than `MIN_CURATED` (2) knowledge-base
+  candidates passing the gate (`good()`), highest priority first. Each uses the shared cache when it has a hit,
+  else is searched, at most `MAX_FIRST_PASS` (4) searched gaps per run. `max_uses` 1 per gap, ≤ `MAX_RESULTS` (5)
+  results. Later passes search only what `apply` requests and never read or write the cache (they carry the
+  user's request). Every run logs `Web search run: N of M gaps searched (...), C from cache (...), K web searches,
+  I input / O output tokens` at INFO (`app/main.py` adds a handler for the `core` logger; the counts come from the
+  API's usage).
+- Web results are tagged from their title and description with the knowledge-base vocabulary (`skills`;
+  `matched_on` = the gap's tags among them, or the gap name when the gap has no tags), so the gate treats
+  them like curated resources.
+- `web_search_cache` (shared across users, no user data): first-pass results per `web.cache_key` = (normalized
+  skill, resource level for the user's AI level, domain only for domain-specific gaps), reused for `CACHE_DAYS`
+  (14), via `repository.get_cached_search` / `save_cached_search`. A failed search is not cached.
+- `web_resource_candidates` (no user data): every approved web resource, with how many approvals newly included
+  it (`save_approved_list` → `_record_web_candidates`). `scripts/list_web_candidates.py` lists the ones not in
+  the knowledge base (`--json` for paste-ready entries) so good ones can be promoted into `knowledge_base.json`.
+  Neither shared table is touched by "Start over"; tests clear both in the `anon` fixture.
 - Buttons resume the graph with their operation directly, no LLM call and no chat message: Approve
   (`{"type": "approve"}`) and a card's Remove (`{"type": "remove", "resource_id"}` → the same `remove_ids`
   operation the chat produces; `present` skips the explanation unless the request was a chat message).

@@ -11,10 +11,13 @@ from core.db import SessionLocal
 from core.models import GapAnalysisRecord
 from tests.conftest import login
 
+CAPABILITIES = dict(python="Intermediate", data_sql="Intermediate", machine_learning="Beginner", ai_llms="Beginner",
+                    cloud="Beginner")
 PROFILE = dict(
-    current_role="Backend Engineer", target_role="AI Engineer", ai_experience="Beginner",
-    domain="FinTech", hours_per_week=8,
+    current_role="Backend Engineer", target_role="AI Engineer", years_experience=6, domain="FinTech",
+    hours_per_week=8, capabilities=CAPABILITIES,
 )
+INPUT = {**PROFILE, "ai_level": "Beginner"}  # GapInput adds the derived AI level
 
 
 def gap(skill, hours):
@@ -66,7 +69,7 @@ def test_invalid_reply_is_retried_with_feedback(fake):
     bad = analysis()
     bad["gaps"][0]["effort_hours"] = 500  # out of range
     client = fake(bad, analysis())
-    result = agent.analyze(GapInput(**PROFILE))
+    result = agent.analyze(GapInput(**INPUT))
     assert len(result.gaps) == 2
     assert "rejected" not in client.requests[0] and "effort_hours" in client.requests[1]
 
@@ -74,20 +77,20 @@ def test_invalid_reply_is_retried_with_feedback(fake):
 def test_gives_up_after_max_attempts(fake):
     fake(*[{"strengths": []}] * agent.MAX_ATTEMPTS)
     with pytest.raises(agent.GapAnalysisFailed):
-        agent.analyze(GapInput(**PROFILE))
+        agent.analyze(GapInput(**INPUT))
 
 
 def test_ignored_correction_is_retried(fake):
     knows_ml = Correction(kind="knows", skill="Machine learning basics", text="I already know this")
     fixed = analysis(strengths=("Python", "Machine Learning  basics"), gaps=(("PCI-DSS for ML", 10),))
     client = fake(analysis(), fixed)
-    result = agent.analyze(GapInput(**PROFILE, corrections=[knows_ml]))
+    result = agent.analyze(GapInput(**INPUT, corrections=[knows_ml]))
     assert [g.skill for g in result.gaps] == ["PCI-DSS for ML"]
     assert "must not be a gap" in client.requests[1]
 
 
 def test_rules_catch_duplicates_and_lacks():
-    data = GapInput(**PROFILE, corrections=[Correction(kind="lacks", skill="python", text="I don't have this")])
+    data = GapInput(**INPUT, corrections=[Correction(kind="lacks", skill="python", text="I don't have this")])
     problems = agent.check_rules(GapAnalysis.model_validate(analysis(gaps=(("Python", 20),))), data)
     assert any("more than once" in p for p in problems)
     assert any("must not be a strength" in p for p in problems)
@@ -96,7 +99,7 @@ def test_rules_catch_duplicates_and_lacks():
 def test_more_than_eight_gaps_is_retried(fake):
     nine = tuple((f"Skill {i}", 10) for i in range(9))
     client = fake(analysis(gaps=nine), analysis(gaps=nine[:8], later=nine[8:]))
-    result = agent.analyze(GapInput(**PROFILE))
+    result = agent.analyze(GapInput(**INPUT))
     assert len(result.gaps) == 8 and [g.skill for g in result.later_gaps] == ["Skill 8"]
     assert "Hour budget for the plan: 208 hours (8 per week x 26 weeks)." in client.requests[0]
     assert "gaps" in client.requests[1] and "at most 8" in client.requests[1]
@@ -107,15 +110,15 @@ def test_effort_must_roughly_fit_the_hour_budget(fake):
     too_much = analysis(gaps=(("Machine learning basics", 150), ("Deep learning", 100)))
     fits = analysis(gaps=(("Machine learning basics", 150), ("PCI-DSS for ML", 70)), later=(("Deep learning", 100),))
     client = fake(too_much, fits)
-    result = agent.analyze(GapInput(**PROFILE))
+    result = agent.analyze(GapInput(**INPUT))
     assert sum(g.effort_hours for g in result.gaps) == 220  # later gaps do not count toward the budget
     assert "The gaps total 250 hours of effort, but the user has 208 hours" in client.requests[1]
-    small = GapInput(**{**PROFILE, "hours_per_week": 2})  # 52 hours
+    small = GapInput(**{**INPUT, "hours_per_week": 2})  # 52 hours
     assert any("has 52 hours" in p for p in agent.check_rules(GapAnalysis.model_validate(fits), small))
 
 
 def test_corrections_apply_to_later_gaps_too():
-    data = GapInput(**PROFILE, corrections=[Correction(kind="knows", skill="Deep learning", text="I already know this")])
+    data = GapInput(**INPUT, corrections=[Correction(kind="knows", skill="Deep learning", text="I already know this")])
     result = GapAnalysis.model_validate(analysis(strengths=("Python", "Deep learning"), later=(("deep  learning", 30),)))
     problems = agent.check_rules(result, data)
     assert any("must not be a gap" in p for p in problems)

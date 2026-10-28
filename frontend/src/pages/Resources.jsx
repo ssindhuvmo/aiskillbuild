@@ -199,7 +199,7 @@ export default function Resources() {
 
       <p className="muted">
         {items.length - fromWeb} from our curated library, {fromWeb} found on the web, ranked for each skill gap by
-        how well they match the skill, your AI experience ({profile.ai_experience}), your industry ({profile.domain})
+        how well they match the skill, your AI level ({profile.ai_level}), your industry ({profile.domain})
         and the time they take. Your roadmap has {budget} hours ({profile.hours_per_week} hrs/week × {WEEKS} weeks).
         {hours > budget &&
           " This list is more than fits: the roadmap will schedule the most important parts and list what it left out, or you can ask to remove a few resources."}

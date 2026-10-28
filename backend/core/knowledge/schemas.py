@@ -30,7 +30,7 @@ class KnowledgeBase(BaseModel):
 class SearchProfile(BaseModel):
     """The parts of the user's profile that retrieval and ranking use."""
 
-    ai_experience: str
+    ai_level: str  # intake/validation.py ai_level(): None, Beginner, Intermediate or Experienced
     domain: str
     hours_per_week: int
 

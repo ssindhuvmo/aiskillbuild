@@ -14,7 +14,7 @@ VOCAB = {
     "sql": ["sql", "relational databases"],
     "fraud-detection": ["fraud"],
 }
-PROFILE = SearchProfile(ai_experience="Beginner", domain="FinTech", hours_per_week=8)
+PROFILE = SearchProfile(ai_level="Beginner", domain="FinTech", hours_per_week=8)
 
 
 def gap(skill, why="Needed for the role.", domain_specific=False):
@@ -67,7 +67,7 @@ def test_domain_boost_only_for_domain_specific_gaps():
     assert plain == {"fraud-general": 1.0, "fraud-fintech": 1.0}
     boosted = TagRetriever(KB).search(gap("Fraud models", domain_specific=True), PROFILE)
     assert boosted[0].resource.id == "fraud-fintech" and boosted[0].match_score == 1.0  # capped
-    other = SearchProfile(ai_experience="Beginner", domain="Retail", hours_per_week=8)
+    other = SearchProfile(ai_level="Beginner", domain="Retail", hours_per_week=8)
     assert all(c.match_score == 1.0 for c in TagRetriever(KB).search(gap("Fraud", domain_specific=True), other))
     assert DOMAIN_BOOST > 0
 

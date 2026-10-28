@@ -86,6 +86,13 @@ python scripts/check_kb_links.py     # from backend/, venv active
 
 Sites that refuse automated requests (e.g. hhs.gov) are reported as "blocked"; open those in a browser.
 
+Web resources that users approve are kept as candidates for the knowledge base. To list the ones not in it yet,
+most approved first (add `--json` for entries ready to paste into `resources`, then review them and check links):
+
+```powershell
+python scripts/list_web_candidates.py     # from backend/, venv active
+```
+
 ## Frontend
 
 ```powershell

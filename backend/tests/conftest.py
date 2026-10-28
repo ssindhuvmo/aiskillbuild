@@ -22,6 +22,7 @@ dbmod.SessionLocal.configure(bind=dbmod.engine)
 from app.main import app  # noqa: E402
 from core import auth  # noqa: E402
 from core.agents.course_search import verify, web  # noqa: E402
+from core.models import WebResourceCandidate, WebSearchCache  # noqa: E402
 
 
 class FakeSearcher:
@@ -74,6 +75,10 @@ def searcher(monkeypatch):
 def anon():
     # https base URL so the Secure session cookie is sent back.
     with TestClient(app, base_url="https://testserver") as c:
+        with dbmod.SessionLocal() as db:  # tables shared across users, so also across tests
+            db.query(WebSearchCache).delete()
+            db.query(WebResourceCandidate).delete()
+            db.commit()
         yield c
 
 
