@@ -82,7 +82,7 @@ export default function App() {
   }
 
   const closeReset = useCallback(() => setConfirmReset(false), []);
-  const shared = useMemo(() => ({ profile, setProfile }), [profile]);
+  const shared = useMemo(() => ({ user, profile, setProfile }), [user, profile]);
 
   if (user === undefined) return <div className="center-screen"><p>Loading…</p></div>;
   if (!user) return <Home onCredential={signIn} error={error} />;
@@ -109,7 +109,7 @@ export default function App() {
           onConfirm={reset}
         >
           <p>
-            This permanently deletes your profile, chat, skill gaps, resource list and roadmap. You stay signed in.
+            This permanently deletes your profile, chat, uploaded resume, skill gaps, resource list and roadmap. You stay signed in.
             This can't be undone.
           </p>
         </ConfirmDialog>

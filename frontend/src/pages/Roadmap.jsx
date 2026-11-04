@@ -10,17 +10,15 @@ import Progress from "../components/Progress.jsx";
 import ProgressBar from "../components/ProgressBar.jsx";
 import { Milestone, Month, Phase, TaskRow, Week } from "../components/Timeline.jsx";
 
-function progressMessages({ target_role: role, domain, hours_per_week: hours }) {
-  return [
-    `Planning your 6 months toward ${role}…`,
-    "Putting your resources in the right order…",
-    `Fitting each week into ${hours} hours…`,
-    `Designing portfolio projects for ${domain}…`,
-    "Setting a milestone for each month…",
-    "Checking the plan against your hour budget…",
-    "Almost there — a full roadmap takes a little while…",
-  ];
+function progressMessages({ target_role: role, hours_per_week: hours }) {
+  return [`Planning your 6 months toward ${role}…`, `Fitting each week into ${hours} hours…`];
 }
+
+// What a phase shows while its text is written, or after the AI's text couldn't be used.
+const NARRATIVE_NOTE = {
+  pending: "Writing this phase's names, milestones and portfolio project…",
+  default: "This phase shows plain text because the AI's descriptions weren't available. Regenerate to try again.",
+};
 
 // Hours per task kind, summed from the saved plan (display only; the backend owns the budget).
 function hoursByKind(roadmap) {
@@ -31,21 +29,35 @@ function hoursByKind(roadmap) {
 
 export default function Roadmap() {
   const [state, setState] = useState(null);
-  const [running, setRunning] = useState(false);
+  const [building, setBuilding] = useState(false); // first build: nothing to show until the plan arrives
+  const [lastRun, setRun] = useState(null); // this visit's last run: { written: phases with text, done, at }
   const [error, setError] = useState("");
+  const [notices, setNotices] = useState([]);
   const [loadError, setLoadError] = useState("");
   const autoRan = useRef(false);
 
-  async function run() {
-    setRunning(true);
+  // The placed plan arrives first; each phase's text follows as it is written. A regenerate keeps the page
+  // on screen and reports progress in a banner, because the weeks usually come back unchanged.
+  async function run(hasRoadmap) {
+    setBuilding(!hasRoadmap);
     setError("");
-    try {
-      setState(await generateRoadmap());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setRunning(false);
-    }
+    setNotices([]);
+    setRun({ written: 0, done: false });
+    let written = 0;
+    await generateRoadmap({
+      onState: ({ state: next, notice, phase }) => {
+        setState(next);
+        setBuilding(false);
+        if (phase) setRun({ written: ++written, done: false });
+        if (notice) setNotices((list) => [...list, notice]);
+      },
+      onError: (message) => {
+        setError(message);
+        setRun(null);
+      },
+    });
+    setBuilding(false);
+    setRun((r) => r && { ...r, done: true, at: new Date() });
   }
 
   useEffect(() => {
@@ -57,7 +69,7 @@ export default function Roadmap() {
         // First visit with an approved list: build the roadmap right away.
         if (s.status === "none" && s.list_approved && !autoRan.current) {
           autoRan.current = true;
-          run();
+          run(false);
         }
       })
       .catch((e) => !cancelled && setLoadError(e.message));
@@ -75,8 +87,8 @@ export default function Roadmap() {
 
   if (loadError) return plain(<Card><p className="error" role="alert">{loadError}</p></Card>);
   if (!state) return plain(<Card><p>Loading…</p></Card>);
-  if (running) {
-    return plain(<Progress messages={progressMessages(state.profile)} note="This usually takes 30–90 seconds." interval={9000} />);
+  if (building) {
+    return plain(<Progress messages={progressMessages(state.profile)} note="This takes a few seconds." interval={3000} />);
   }
 
   const { profile, roadmap } = state;
@@ -86,7 +98,7 @@ export default function Roadmap() {
       <Card>
         {error && <p className="error" role="alert">{error}</p>}
         {state.list_approved ? (
-          <div className="row"><Button onClick={run}>Build my roadmap</Button></div>
+          <div className="row"><Button onClick={() => run(false)}>Build my roadmap</Button></div>
         ) : (
           <p>Approve your resource list on the <Link to="/resources">Resources</Link> step first, then come back here.</p>
         )}
@@ -96,6 +108,7 @@ export default function Roadmap() {
 
   const kinds = hoursByKind(roadmap);
   const free = roadmap.budget_hours - roadmap.total_hours;
+  const writing = roadmap.phases.some((p) => p.narrative === "pending") || (lastRun && !lastRun.done);
 
   return (
     <>
@@ -105,7 +118,9 @@ export default function Roadmap() {
         actions={
           <>
             <Button onClick={() => downloadRoadmap().catch((e) => setError(e.message))}>Download Plan</Button>
-            <Button variant="secondary" onClick={run} disabled={!state.list_approved}>Regenerate Roadmap</Button>
+            <Button variant="secondary" onClick={() => run(true)} disabled={!state.list_approved || writing}>
+              {writing ? "Regenerating…" : "Regenerate Roadmap"}
+            </Button>
           </>
         }
       />
@@ -115,7 +130,7 @@ export default function Roadmap() {
           {state.list_approved ? (
             <>
               Your approved resources changed since this roadmap was built.{" "}
-              <Button variant="text" onClick={run}>Rebuild the roadmap</Button> to update it.
+              <Button variant="text" onClick={() => run(true)}>Rebuild the roadmap</Button> to update it.
             </>
           ) : (
             <>
@@ -125,7 +140,24 @@ export default function Roadmap() {
           )}
         </Notice>
       )}
+      {lastRun && (
+        <Notice>
+          {lastRun.done ? (
+            <>
+              Roadmap regenerated at {lastRun.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. The
+              phase names, milestones, practice tasks and portfolio projects were rewritten. The weeks and hours are
+              planned from your approved resources and weekly hours, so they stay the same unless those change.
+            </>
+          ) : (
+            <>
+              Regenerating your roadmap… The weekly plan is ready; writing each phase's text ({lastRun.written} of{" "}
+              {roadmap.phases.length} done).
+            </>
+          )}
+        </Notice>
+      )}
       {error && <p className="error" role="alert">{error}</p>}
+      {notices.map((n) => <Notice key={n}>{n}</Notice>)}
 
       <Card title="Where your hours go">
         <ProgressBar
@@ -148,6 +180,9 @@ export default function Roadmap() {
 
       {roadmap.phases.map((phase) => (
         <Phase key={phase.number} title={`Phase ${phase.number}: ${phase.name}`} meta={`months ${phase.months.join("–")}`}>
+          {NARRATIVE_NOTE[phase.narrative] && (
+            <p className="muted" role="status">{NARRATIVE_NOTE[phase.narrative]}</p>
+          )}
           <Card as="div" className="project">
             <div className="stack-tight">
               <div className="card-label">Portfolio project · {profile.domain}</div>
@@ -174,8 +209,9 @@ export default function Roadmap() {
               {month.weeks.map((week) => (
                 <Week key={week.number} title={`Week ${week.number} · ${week.focus}`} meta={`${week.hours} h`}>
                   {week.tasks.map((task, i) => (
-                    <TaskRow key={i} kind={task.kind} title={task.title} hours={task.hours} link={task.resource} />
+                    <TaskRow key={task.id || i} kind={task.kind} title={task.title} hours={task.hours} link={task.resource} />
                   ))}
+                  {week.tasks.length === 0 && <li className="task muted">Nothing planned: catch up or rest.</li>}
                 </Week>
               ))}
               <Milestone>{month.milestone}</Milestone>

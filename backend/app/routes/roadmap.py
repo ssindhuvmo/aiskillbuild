@@ -1,13 +1,13 @@
-import anthropic
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from core import repository
 from core.agents.scheduler import agent
 from core.agents.scheduler.export import to_markdown
 from core.auth import current_user
 from core.db import get_db
-from core.llm import LLMUnavailable, friendly_error
 from core.models import User
 from core.schemas import RoadmapState
 
@@ -16,27 +16,28 @@ router = APIRouter(prefix="/api/roadmap")
 
 @router.get("", response_model=RoadmapState)
 def get_roadmap(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    return repository.get_roadmap_state(db, user.user_id)
+    return agent.state_for_user(db, user.user_id)
 
 
-# Plain def: FastAPI runs it in a worker thread, so the long LLM call doesn't block other requests.
-@router.post("/generate", response_model=RoadmapState)
+@router.post("/generate")
 def generate(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """SSE: the placed roadmap at once, then each phase's text as it arrives (see agent.generate)."""
     try:
-        return agent.run_for_user(db, user.user_id)
-    except agent.ListNotApproved as e:
+        agent.check_ready(db, user.user_id)
+    except (agent.ListNotApproved, agent.AlreadyRunning) as e:
         raise HTTPException(409, str(e))
-    except agent.SchedulerTruncated:
-        raise HTTPException(502, "The roadmap was too long for one AI reply and was cut off. Please try again.")
-    except agent.SchedulerFailed:
-        raise HTTPException(502, "The AI couldn't produce a roadmap that fits your weekly hours. Please try again.")
-    except (LLMUnavailable, anthropic.APIError) as e:  # missing key, auth, rate limit, connection
-        raise HTTPException(503, friendly_error(e))
+    user_id = user.user_id
+
+    def event_stream():
+        for event in agent.generate(user_id):
+            yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/export.md")
 def export(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    state = repository.get_roadmap_state(db, user.user_id)
+    state = agent.state_for_user(db, user.user_id)
     if state.roadmap is None:
         raise HTTPException(404, "Generate your roadmap first.")
     return Response(

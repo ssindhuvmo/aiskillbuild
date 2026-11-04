@@ -1,6 +1,5 @@
-"""Inputs and outputs of the scheduler agent. RoadmapDraft is the JSON schema the model must
-answer in; Pydantic re-validates every reply and budget.check_budget enforces the hour limits.
-Roadmap is what gets saved and shown: the draft plus links and hour totals added in Python."""
+"""Inputs and outputs of the scheduler. placement.place builds the Roadmap in plain Python (weeks, tasks,
+hours, links); the LLM only writes a PhaseNarrative per phase, which narrative.apply copies into it."""
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -21,27 +20,6 @@ class SchedulerInput(BaseModel):
     resources: list[ApprovedResource]
 
 
-class Task(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    kind: Literal["learn", "practice", "project"]
-    hours: int = Field(ge=1, le=40)
-    resource_id: str | None = None  # the approved resource this task uses, if any
-
-
-class Week(BaseModel):
-    number: int = Field(ge=1, le=26)
-    focus: str = Field(min_length=1, max_length=200)
-    tasks: list[Task] = Field(min_length=1, max_length=5)
-
-
-class Month(BaseModel):
-    number: int = Field(ge=1, le=6)
-    theme: str = Field(min_length=1, max_length=120)
-    summary: str = Field(min_length=1, max_length=500)
-    milestone: str = Field(min_length=1, max_length=300)  # what the user can do or show by the end of the month
-    weeks: list[Week] = Field(min_length=4, max_length=5)
-
-
 class Project(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     problem: str = Field(min_length=1, max_length=500)  # the industry problem it solves
@@ -49,16 +27,28 @@ class Project(BaseModel):
     deliverables: list[str] = Field(min_length=1, max_length=5)
 
 
-class Phase(BaseModel):
-    number: int = Field(ge=1, le=3)
+# --- Phase narrative (what the LLM writes) ------------------------------------------
+
+
+class MonthText(BaseModel):
+    theme: str = Field(min_length=1, max_length=120)
+    milestone: str = Field(min_length=1, max_length=300)  # what the user can do or show by the end of the month
+
+
+class PracticeText(BaseModel):
+    id: str = Field(min_length=1, max_length=20)  # a practice task's id from the placed plan
+    title: str = Field(min_length=1, max_length=200)
+
+
+class PhaseNarrative(BaseModel):
+    """The text of one phase. One field per month (a list's length cannot be enforced by the structured-output
+    schema). It has no hours, weeks or resources: those come from placement.place and cannot be changed."""
+
     name: str = Field(min_length=1, max_length=120)
+    first_month: MonthText
+    second_month: MonthText
+    practice: list[PracticeText] = Field(default_factory=list, max_length=40)
     project: Project
-
-
-class RoadmapDraft(BaseModel):
-    # Phases first: the model settles the projects before the weeks, and the reply ends with month 6.
-    phases: list[Phase] = Field(min_length=3, max_length=3)
-    months: list[Month] = Field(min_length=6, max_length=6)
 
 
 # --- Saved roadmap ------------------------------------------------------------------
@@ -75,6 +65,7 @@ class ResourceLink(BaseModel):
 
 
 class RoadmapTask(BaseModel):
+    id: str = ""  # "w<week>-<n>", so the narrative can reword a practice task (empty in roadmaps saved before ids)
     title: str
     kind: Literal["learn", "practice", "project"]
     hours: int
@@ -102,6 +93,9 @@ class RoadmapPhase(BaseModel):
     name: str
     months: list[int]
     project: Project
+    gaps: list[str] = []  # the skill gaps studied in this phase, in plan order
+    # pending: the AI is still writing its text; ai: written by the AI; default: plain text after the AI failed
+    narrative: Literal["pending", "ai", "default"] = "ai"
 
 
 class Roadmap(BaseModel):

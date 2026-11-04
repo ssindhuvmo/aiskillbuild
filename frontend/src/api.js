@@ -42,9 +42,22 @@ export const getDomains = () => request("/api/domains");
 export const updateProfile = (fields) => request("/api/profile", json("PUT", fields));
 export const confirmProfile = () => request("/api/profile/confirm", json("POST"));
 
+export const getResume = () => request("/api/resume");
+// FormData sets its own multipart Content-Type, so no JSON header here.
+export function uploadResume(file) {
+  const body = new FormData();
+  body.append("file", file);
+  return request("/api/resume", { method: "POST", body });
+}
+export const saveResume = (data) => request("/api/resume", json("PUT", data));
+export const deleteResume = () => request("/api/resume", { method: "DELETE" });
+
 export const getGaps = () => request("/api/gaps");
 export const analyzeGaps = (corrections) => request("/api/gaps/analyze", json("POST", { corrections }));
 export const confirmGaps = () => request("/api/gaps/confirm", json("POST"));
+// One Skill Analysis button (knows | not_needed | later | plan | restore); `make_room` accepts a budget suggestion.
+export const adjustGap = (action, skill, make_room = []) =>
+  request("/api/gaps/adjust", json("POST", { action, skill, make_room }));
 
 export const getResources = () => request("/api/resources");
 export const searchResources = () => request("/api/resources/search", json("POST"));
@@ -52,7 +65,6 @@ export const removeResource = (resource_id) => request("/api/resources/remove", 
 export const approveResources =() => request("/api/resources/approve", json("POST"));
 
 export const getRoadmap = () => request("/api/roadmap");
-export const generateRoadmap = () => request("/api/roadmap/generate", json("POST"));
 
 // Fetches the Markdown export and saves it as a file.
 export async function downloadRoadmap() {
@@ -65,12 +77,11 @@ export async function downloadRoadmap() {
   URL.revokeObjectURL(url);
 }
 
-// Streams a chat reply over SSE from /api/intake/chat or /api/resources/chat.
-// Handlers: onToken(text), onState(event: {profile} or {resources}), onError(msg).
-export async function streamChat(path, message, { onToken, onState, onError }) {
+// Posts to an SSE endpoint and calls onEvent(event) for each `data:` frame; failures go to onError(msg).
+async function streamEvents(path, body, onEvent, onError) {
   let res;
   try {
-    res = await fetch(path, json("POST", { message }));
+    res = await fetch(path, json("POST", body));
   } catch {
     onError("Cannot reach the server. Is the backend running on port 8000?");
     return;
@@ -98,11 +109,26 @@ export async function streamChat(path, message, { onToken, onState, onError }) {
     buffer = frames.pop();
     for (const frame of frames) {
       const line = frame.split("\n").find((l) => l.startsWith("data: "));
-      if (!line) continue;
-      const evt = JSON.parse(line.slice(6));
-      if (evt.type === "token") onToken(evt.text);
-      else if (evt.type === "state") onState(evt);
-      else if (evt.type === "error") onError(evt.message);
+      if (line) onEvent(JSON.parse(line.slice(6)));
     }
   }
+}
+
+// Streams a chat reply over SSE from /api/intake/chat or /api/resources/chat.
+// Handlers: onToken(text), onState(event: {profile} or {resources}), onError(msg).
+export function streamChat(path, message, { onToken, onState, onError }) {
+  return streamEvents(path, { message }, (evt) => {
+    if (evt.type === "token") onToken(evt.text);
+    else if (evt.type === "state") onState(evt);
+    else if (evt.type === "error") onError(evt.message);
+  }, onError);
+}
+
+// Builds the roadmap: onState({state, phase, notice}) first with the placed plan (every phase "pending"),
+// then once per phase as its text arrives. Resolves when the stream ends.
+export function generateRoadmap({ onState, onError }) {
+  return streamEvents("/api/roadmap/generate", undefined, (evt) => {
+    if (evt.type === "state" && evt.state) onState(evt);
+    else if (evt.type === "error") onError(evt.message);
+  }, onError);
 }

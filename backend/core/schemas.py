@@ -1,9 +1,11 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from core.agents.course_search.schemas import ResourceList
-from core.agents.gap_analysis.schemas import Correction, GapAnalysis
+from core.agents.gap_analysis.schemas import BudgetSuggestion, Correction, GapAnalysis
+from core.agents.resume_parser.schemas import ResumeData
 from core.agents.scheduler.schemas import Roadmap
 
 
@@ -82,6 +84,18 @@ class IntakeState(BaseModel):
     suggestions: list[RoleSuggestion] = []  # roles offered after "help me choose", until one is picked
 
 
+class ResumeState(BaseModel):
+    """The uploaded resume: the parser's draft while in review, then the user's reviewed data."""
+
+    status: Literal["none", "review", "reviewed"]
+    profile: ProfileOut
+    filename: str | None = None
+    uploaded_at: datetime | None = None
+    data: ResumeData | None = None
+    dropped: list[str] = []  # parser items left out because they weren't found in the text (review only)
+    years_experience: int | None = None  # calculated from the roles
+
+
 class GapState(BaseModel):
     status: Literal["none", "ready"]
     profile: ProfileOut
@@ -89,10 +103,19 @@ class GapState(BaseModel):
     corrections: list[Correction] = []
     confirmed: bool = False
     stale: bool = False  # the profile changed since this analysis was made
+    suggestion: BudgetSuggestion | None = None  # only on an adjust reply: adding a gap did not fit
 
 
 class AnalyzeIn(BaseModel):
     corrections: list[Correction] = []
+
+
+class AdjustIn(BaseModel):
+    """One Skill Analysis button. `make_room`: plan gaps to move to later so a "plan" gap fits."""
+
+    action: Literal["knows", "not_needed", "later", "plan", "restore"]
+    skill: str = Field(min_length=1, max_length=120)
+    make_room: list[str] = Field(default=[], max_length=8)
 
 
 class ResourceState(BaseModel):

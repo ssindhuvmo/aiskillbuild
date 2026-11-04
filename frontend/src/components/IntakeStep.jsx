@@ -3,11 +3,12 @@ import { updateProfile } from "../api.js";
 import { DEFAULT_PREFERENCES, ratedCount, CAPABILITY_AREAS } from "../capabilities.js";
 import Button from "./Button.jsx";
 import FilterChip from "./FilterChip.jsx";
+import ResumeUpload from "./ResumeUpload.jsx";
 import { CapabilityRatings, cleanConstraints, ConstraintsInput, PreferenceChips } from "./ProfileInputs.jsx";
 
 // The answer widget under the chat for the current intake step. Widgets save through the
 // profile API, then send a short chat message so the assistant moves to the next step.
-export default function IntakeStep({ step, profile, suggestions, onProfile, onSend }) {
+export default function IntakeStep({ step, profile, resume, suggestions, onProfile, onResume, onSend }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [prefs, setPrefs] = useState(profile.learning_preferences ?? DEFAULT_PREFERENCES);
@@ -47,14 +48,12 @@ export default function IntakeStep({ step, profile, suggestions, onProfile, onSe
   }
 
   if (step === "resume") {
+    // After the upload the review screen opens (Intake); saving it moves the chat on.
     return (
-      <div className="widget">
-        <p className="muted">Resume upload isn't available yet. Skip this step and I'll ask for the same details instead.</p>
+      <>
+        <ResumeUpload resume={resume} busy={busy} onUploaded={onResume} onSkip={() => skip("resume", "Skip the resume")} />
         {errorText}
-        <div className="row">
-          <Button variant="secondary" disabled={busy} onClick={() => skip("resume", "Skip the resume")}>Skip</Button>
-        </div>
-      </div>
+      </>
     );
   }
 

@@ -144,6 +144,27 @@ visit and editable at any time; edits mark later steps out of date.
 - The analysis now uses the resume data and the capability assessment, so skills
   are evidence-based where possible. Each strength is marked "From your resume",
   "You said" or "Assumed". User corrections continue to work.
+- Editing the gaps directly. Each button takes effect at once, without a new
+  analysis, and un-confirms the skills:
+  - A gap in the plan: "I already know this" (it becomes a "You said" strength),
+    "Move to later" (it goes to "Later / optional") and "Not needed".
+  - A "Later / optional" gap: "Add to my plan" and "Not needed".
+  - "Not needed" removes the skill completely: it is neither a strength nor a gap.
+    Removed skills sit in a collapsed "Removed" list, each with Restore, which puts
+    the gap back where it was.
+  - Every button is saved as a correction (`knows`, `not_needed`, `later`, `plan`),
+    so a re-analysis keeps the user's choices. In particular it never suggests a
+    "not needed" skill again; the rule check rejects and retries an analysis that
+    does.
+  - Adding a gap (or restoring a plan gap) that would go over the hour budget or the
+    8-gap limit does not fail. The plan stays as it is and the page says by how
+    much, and suggests which gaps to move to later (lowest priority first, never a
+    gap the user added unless nothing else is enough). One click accepts the swap.
+    A gap that alone needs more than the whole budget is explained instead (raise
+    the weekly hours, or keep it for later).
+  - Removing an essential (high-priority) gap shows a one-line note on why it
+    matters for the target role, here and in the "Removed" list. The user's choice
+    is kept.
 - Domain use cases and domain-specific gaps (e.g. fraud detection in FinTech,
   HIPAA in Healthcare) are kept from V1.
 
@@ -182,6 +203,10 @@ Page:
 - Actions: Download Plan (Markdown), Export PDF, Regenerate Roadmap.
 - Budget rules stay enforced in Python: no week over the weekly hours, total within
   weekly hours × 26.
+- Python places every task (order, weeks, hours, practice and project time); the LLM
+  only writes each phase's text (one call per phase, in parallel, streamed to the
+  page). If a phase's text fails, it keeps plain default text, so a roadmap is
+  always produced.
 
 ### 8. AI Career Transition Report (BRD section 8.4)
 The primary output: one document assembled from saved data, with these sections in
@@ -303,7 +328,7 @@ LangGraph remains limited to flows with a real pause-for-user loop.
    behavior changes. — done
 8. **Expanded intake, resume upload and Career Profile** (BR-01 to BR-07, BR-09 to
    BR-12). New profile fields with Alembic migrations, resume parser, gap analysis
-   using resume data and the capability assessment, skill gap chart.
+   using resume data and the capability assessment, skill gap chart. — built, in testing
 9. **Resource sources and preferences** (BR-17, BR-20, BR-21). YouTube source,
    preference- and budget-aware ranking, filters, Save / Start / Complete.
 10. **Roadmap tracking and Transition Report** (BR-18, BR-19, BRD 8.4). Status,

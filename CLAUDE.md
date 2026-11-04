@@ -8,25 +8,31 @@ milestones; `README.md` has setup steps. Build only the current milestone.
   parse the request, call `core/`, map errors to HTTP. No business logic in routes.
 - `backend/core/` — everything else:
   - `config.py` — env config (loads `backend/.env`); injects `truststore` so HTTPS uses the OS cert store.
-  - `db.py` — engine, `SessionLocal`, `get_db` dependency. `models.py` — SQLAlchemy tables. `schemas.py` — Pydantic I/O.
+  - `db.py` — engine, `SessionLocal`, `get_db`, `init_db` (Alembic upgrade with a pre-migration backup).
+    `models.py` — SQLAlchemy tables (incl. `Resume`). `schemas.py` — Pydantic I/O.
   - `repository.py` — all DB access.
   - `auth.py` — `verify_google_token` and the `current_user` dependency.
-  - `agents/<name>/` — one module per agent with its own `prompt.md`: `intake/` (streaming chat with a
-    `record_profile` tool), `gap_analysis/` (one structured-output call), `course_search/` (the LangGraph
-    graph: web search, refinement chat, approval) and `scheduler/` (one structured-output call plus the
-    Python hour budget). `llm.py` — Anthropic client and `friendly_error`.
+  - `agents/<name>/` — one module per agent with its own `prompt.md`: `intake/` (streaming chat with
+    `record_profile` and `suggest_roles` tools; `validation.py` defines the steps, levels and options),
+    `resume_parser/` (file checks + text extraction, one structured-output call, plain-Python rules, file
+    storage), `gap_analysis/` (one structured-output call), `course_search/` (the LangGraph graph: web search,
+    refinement chat, approval) and `scheduler/` (Python placement and hour budget; one structured-output
+    call per phase, for the text only).
+    `llm.py` — Anthropic client and `friendly_error`.
   - `knowledge/` — the knowledge base (`store.py`) and the retrieval layer (`retriever.py`).
 - `backend/config/domains.json` — supported domains (edit here, not in code).
 - `backend/data/knowledge_base.json` — curated resources + skill-tag vocabulary (edit here, not in code).
 - `backend/scripts/check_kb_links.py` — live check of every knowledge-base URL (network; not in pytest).
+- `backend/alembic.ini`, `backend/migrations/` — Alembic (`versions/0001_baseline` = the milestone-7 schema).
+- `backend/uploads/<user id>/` — uploaded resumes (`UPLOAD_DIR`; gitignored, never served).
 - `frontend/src/` — `App.jsx` (auth gate, shell, routes), `api.js` (all fetch calls), `pages/`, `components/`,
   `styles/tokens.css` + `styles.css` (see "Design system and app shell").
 - `docs/` — the BRD and PRD that `SPEC.md` is derived from, and `docs/mockups/` (the visual reference).
 
 ## Milestones
 Numbered in `SPEC.md`: 1 intake, 2 Google sign-in, 3 skill gaps, 4 knowledge base + ranking, 5 resource approval +
-scheduler + roadmap, 6 live web search + refinement (LangGraph), 7 design system and app shell; 8–14 are listed
-there. Build one at a time and stop for testing after each.
+scheduler + roadmap, 6 live web search + refinement (LangGraph), 7 design system and app shell, 8 expanded
+intake + resume + Career Profile; 9–14 are listed there. Build one at a time and stop for testing after each.
 
 ## Orchestration decision: LangGraph for course search only
 - The course search agent and conversational refinement (flow steps 4–5) are one LangGraph graph in
@@ -58,8 +64,11 @@ there. Build one at a time and stop for testing after each.
 - Frontend never stores identity itself; it calls `/api/auth/me` on load, and any 401 returns to the sign-in screen.
 
 ## Skill-gap analysis (Milestone 3)
-- `gap_analysis/schemas.py`: `GapInput` (profile + `Correction`s; room for resume data) → `GapAnalysis`.
-- `agent.analyze` calls `client.messages.parse(output_format=GapAnalysis)`. A reply is rejected if Pydantic
+- `gap_analysis/schemas.py`: `GapInput` (profile, capabilities, `ai_level`, reviewed resume, `Correction`s) →
+  `GapAnalysis` (see Milestone 8 for sources and levels).
+- `agent.analyze` calls `client.messages.parse(output_format=GapAnalysis)`, then `repair` fixes in Python what the
+  prompt asks for (an unmatched `resume` strength → `assumed`; a target not above the current level → next level;
+  last gaps moved to the front of `later_gaps` until the budget fits, keeping one). A reply is rejected if Pydantic
   validation fails (the API schema can't express min/max limits, so Pydantic enforces them) or `check_rules`
   finds problems (duplicate skills, a "knows" skill left as a gap, a "lacks" skill kept as a strength, total
   effort over the hour budget). Up to `MAX_ATTEMPTS` tries, feeding the problems back; then `GapAnalysisFailed`
@@ -101,21 +110,36 @@ there. Build one at a time and stop for testing after each.
   list and `approved_via`. `repository.save_approved_list` is the only write path and `get_approved_list` (None
   when missing or stale) the only read path. Approval always covers the whole current list
   (`repository.build_approved_list`) and is written by the graph's `approve` node (see Milestone 6).
-- `scheduler/schemas.py`: `SchedulerInput` → `RoadmapDraft` (what the LLM returns: 3 phases with a portfolio
-  project each, then 6 months of weeks and tasks; tasks reference `resource_id`, never URLs) → `Roadmap` (saved:
-  links copied from the approved list, hour totals, `unscheduled` resources).
-- `scheduler/budget.py` (pure) owns the calendar and the budget: `WEEKS` = 26, `MONTH_WEEKS` = 4/4/5/4/4/5,
-  `budget()` = hours per week × 26. `check_budget` rejects a draft with a wrong calendar, a week over the weekly
-  hours, a total over budget, an unknown `resource_id`, a `learn` task without a `resource_id`, more `learn` hours for a resource than it takes, or a
-  phase without `project` tasks. Whole-plan problems are listed first. `finalize` builds the `Roadmap`.
-- `agent.build` calls `client.messages.create(output_config=...)` (not `messages.parse`) so it can check
-  `stop_reason` before parsing: `max_tokens` logs an error and raises `SchedulerTruncated` at once (no retry).
-  Otherwise Pydantic + `check_budget`, up to `MAX_ATTEMPTS` with the problems fed back, then `SchedulerFailed`.
-  Both → HTTP 502; LLM errors → 503; no approved list → 409. An over-budget roadmap is never saved.
+- Python builds the plan, the LLM only writes the text. `scheduler/schemas.py`: `SchedulerInput` → `Roadmap`
+  (saved: weeks, tasks with ids `w<week>-<n>`, links copied from the approved list, hour totals, `unscheduled`
+  resources, 3 `phases` with `gaps` and `narrative` = pending | ai | default). `PhaseNarrative` is all the LLM
+  returns: phase name, `first_month` / `second_month` (theme + milestone), practice task titles by id, and the
+  portfolio `project` (title, problem, named public dataset, deliverables). No hours, weeks, resources or URLs.
+- `scheduler/budget.py` (pure) owns the calendar and constants: `WEEKS` = 26, `MONTH_WEEKS` = 4/4/5/4/4/5,
+  `PHASE_MONTHS`, `budget()` = hours per week × 26, `PRACTICE_SHARE` (0.35), `PROJECT_SHARE` (0.25 of each
+  phase reserved at its end), `PROJECT_MIN_HOURS`. `check_budget(roadmap, data)` is a safety assertion
+  (calendar, weekly and total hours, totals add up, links match the approved list, learn hours ≤ a resource's
+  hours, 3 phases each with project work); a plan that fails it is never saved (`PlacementFailed`).
+- `scheduler/placement.py` (pure) `place(data)`: resources ordered by gap priority, the gap's order, then level
+  (beginner first); weeks filled in order up to the weekly hours, long resources split (exactly their hours of
+  learn time), practice on the same resource after each; the phase's project right after its last study hour,
+  proportionate and within the reserve. No padding: what doesn't fit goes to `unscheduled`, empty weeks stay
+  empty. It returns a complete roadmap with plain default text and every phase `pending`.
+- `scheduler/narrative.py`: `write` = one `messages.parse(output_format=PhaseNarrative)` call per phase;
+  `check` rejects unknown practice ids and links; `MAX_ATTEMPTS` = 2 (one retry with the problems fed back),
+  then `NarrativeFailed`. `apply` copies the text in (only text changes); `use_default` keeps the plain text.
+- `scheduler/agent.py` `generate(user_id)` (SSE, own DB session, one run per user via a lock): place + check +
+  `save_roadmap(log=False)` → `state` event at once; the 3 phases run in parallel (`ThreadPoolExecutor`), each
+  applied, saved (`update_roadmap`) and sent as a `state` event with `phase` and `notice` (set when the default
+  text was kept: LLM error, missing key or failed checks) → `done`. A roadmap is always produced; the finished
+  one is logged once to `agent_outputs` as `scheduler`. A phase left `pending` by an interrupted run reads as
+  `default` (`state_for_user`).
 - `roadmaps` table (one row per user) with a snapshot of the approved list + profile; `stale` = snapshot differs
-  or no current approved list. Every run is logged to `agent_outputs` as `scheduler`, every approval as
-  `resource_approval`. `GET /api/roadmap/export.md` returns `scheduler/export.py::to_markdown` as a download.
-- Generation is a blocking request (about 30–90 s) with rotating progress messages (`components/Progress.jsx`).
+  or no current approved list. Every approval is logged as `resource_approval`. Endpoints: `GET /api/roadmap`,
+  `POST /api/roadmap/generate` (SSE; 409 without a current approved list or while a run is in progress),
+  `GET /api/roadmap/export.md` (`scheduler/export.py::to_markdown`).
+- The Roadmap page shows the placed plan within a second or two; each phase says it is being written until its
+  text arrives, and says when it shows plain text.
 
 ## Web search + refinement graph (Milestone 6)
 - `course_search/graph.py`: `retrieve_kb → web_search → merge_dedupe → verify_urls → rank → present →
@@ -195,12 +219,68 @@ there. Build one at a time and stop for testing after each.
   updates it on every profile change. No endpoint exists just for the shell.
 - There are no frontend tests; check with `npm run build` and in the browser at desktop and 390 px widths.
 
+## Expanded intake, resume and Career Profile (Milestone 8)
+- Profile fields (`Profile`): `current_role`, `target_role`, `years_experience`, `domain`, `hours_per_week`,
+  `capabilities` ({area: level} for the 5 `CAPABILITY_AREAS`), `learning_preferences` (None = not asked),
+  `constraints` (None = not asked, {} = none), `additional_context` (None = not asked, "" = skipped),
+  `resume_skipped`, `field_sources` ({field: "resume" | "user"}, shown as "· from resume").
+- `intake/validation.py` is the single definition of the 8 steps (`STEPS`: goal → resume → background → hours →
+  capabilities → preferences → constraints → context), the validators, `REQUIRED` and `ai_level()` (mean of the
+  ML and AI / LLMs ratings, rounded down; the only AI level ranking and the scheduler use). "Help me choose" moves
+  the goal step after background. `frontend/src/capabilities.js` mirrors the option lists.
+- **One level scale everywhere:** `LEVELS` = None, Beginner, Intermediate, Experienced (capability ratings and a
+  gap's `current_level`); `TARGET_LEVELS` adds Expert for a gap's `target_level` only. Both live in
+  `validation.py` and are mirrored in `capabilities.js`; never introduce other level names.
+- Resume parser (`agents/resume_parser/`):
+  - `extract.read` checks size (≤ 5 MB → 413), extension + magic bytes (`%PDF-`, or a ZIP with
+    `word/document.xml`; else 415), extracts text with pypdf / python-docx (no text → 422), truncates to
+    `MAX_CHARS`.
+  - `agent.parse`: one `messages.parse(output_format=ResumeData)` call with the text inside `<resume>` (resume
+    tags in the text are stripped; the prompt says it is untrusted). `rules.check_rules` requires every skill,
+    title, employer and certification name to appear in the normalized text, and valid dates (start ≤ end ≤
+    today). Up to `MAX_ATTEMPTS` with problems fed back. **Partial results:** if the last Pydantic-valid reply
+    still fails, `rules.filter_unverified` keeps what passes and returns `dropped` labels; `ResumeParseFailed`
+    (502) only when no reply validated or nothing usable is left. LLM errors → 503.
+  - `rules.years_of_experience` merges overlapping role intervals up to today (the LLM never supplies it);
+    `rules.prefill` → current role (latest), years, industry.
+  - `storage`: `<UPLOAD_DIR>/<user id, or its sha256 if not [A-Za-z0-9_-]>/resume.<ext>`; a new upload
+    replaces the old file; files are never served.
+- `resumes` table (one row per user): file info, extracted `text`, `draft` ({data, dropped}) while `status` is
+  `review`, `data` (the reviewed `ResumeData`) once `reviewed`. Only `repository.reviewed_resume` is used
+  downstream; the intake model gets a summary of it, never the text. Confirm is refused while in review.
+- Endpoints (`routes/resume.py`): `GET /api/resume` (`ResumeState`), `POST` (multipart upload, blocking
+  10–20 s; nothing is stored if parsing fails), `PUT` (the reviewed `ResumeData`; dates checked, not the text;
+  fills profile fields that are empty or still "resume"-sourced, marked "resume"; un-confirms profile and
+  gaps), `DELETE` (row + file; values stay but lose the "resume" label). "Start over" deletes the folder.
+- Gap analysis: `Strength.source` is `resume` (must match a resume skill, title or certification, whole-word),
+  `user` (ratings, context, corrections) or `assumed`; each `Gap` has `current_level` / `target_level` with the
+  target above the current level. The snapshot is `repository.gap_inputs` (analysis fields + reviewed resume),
+  so a resume change makes the analysis stale. Analyses saved before this milestone fail validation and are
+  redone.
+- Frontend: Intake shows "Question N of 8" and a widget per step under the chat (`IntakeStep`: `ResumeUpload`,
+  capability / preference / constraint pickers from `ProfileInputs`, role suggestion chips); widgets save via
+  the API, then send a short chat message so the agent moves on. A draft opens `ResumeReview` in the main
+  column (Save / Discard). `ProfileSummary` is the Career Profile card (Name from Google via
+  `ProfileContext.user`, every field, the resume with "Review again"). Skill Analysis groups strengths by source
+  and draws `GapChart` (bar = current, marker = target; their widths are the only inline style).
+- Gap buttons (`gap_analysis/adjust.py`, `POST /api/gaps/adjust` with `action` knows | not_needed | later |
+  plan | restore, `skill`, `make_room`): plain-Python edits to the saved analysis, no LLM call. Each one is saved
+  as a `Correction` (at most one button correction per skill; a `not_needed` one keeps the `gap` and `in_plan`
+  for Restore) through `repository.update_gap_analysis`, which keeps the snapshot and un-confirms. `check_rules`
+  enforces them on re-analysis; `repair` never moves a `plan` gap to later. A `plan` that doesn't fit
+  (budget × `EFFORT_TOLERANCE` or `MAX_GAPS`) changes nothing and returns `GapState.suggestion`
+  (`BudgetSuggestion`); resending with `make_room` = its `move` does the swap. Limits that can't be met (an empty
+  plan, a full later list) → 422; no current analysis → 409.
+
 ## Conventions
 - Secrets live only in `backend/.env`; `frontend/.env` holds only `VITE_GOOGLE_CLIENT_ID`. Both are gitignored;
   keep the `.env.example` files in sync when adding variables.
 - Chat endpoints stream Server-Sent Events; the stream opens its own DB session.
-- No migrations yet: schema changes mean deleting `backend/career_strategist.db` in dev. A full reset deletes
-  `backend/graph_checkpoints.db` as well.
+- Schema changes go through Alembic: edit `core/models.py`, run `alembic revision --autogenerate -m "..."` in
+  `backend/`, review the file (SQLite needs `render_as_batch`, already set; move data by hand where needed) and
+  restart: `init_db` upgrades on start after backing up the DB file. `tests/test_migrations.py` fails if the
+  migrations and models differ. Never delete the user's DB to change the schema. A full dev reset deletes
+  `career_strategist.db`, `graph_checkpoints.db` and `uploads/`.
 - Never disable SSL verification. Use truststore (already injected in `core/config.py`; for pip use
   `--use-feature=truststore`).
 
@@ -210,11 +290,15 @@ there. Build one at a time and stop for testing after each.
   Use the `anon` fixture (HTTPS TestClient so the Secure cookie is sent) and `login(client, sub)`.
 - The LLM is faked in tests by monkeypatching the agent module's `get_client`. The gap-analysis fake validates
   replies with `GapAnalysis.model_validate`, so bad data raises `ValidationError` like the SDK does. The
-  scheduler fake (`tests/test_scheduler_budget.py`) returns raw JSON text with a `stop_reason`; its `draft()`
-  helper builds a valid plan to mutate.
+  scheduler's narrative fake (`tests/test_scheduler_budget.py`, patched on `narrative.get_client`) takes dicts,
+  exceptions or functions of the request (the phases run in parallel); `tests/test_roadmap.py::phase_reply`
+  answers any phase and `generate(client)` returns the SSE events and the final state.
 - The graph runs in every test with a real `SqliteSaver` on `:memory:`. `conftest.py`'s autouse `searcher`
   fixture replaces `web.get_searcher` and `verify.get_checker`: fill `searcher.results[skill]` (candidates or an
   exception) and `searcher.link_status[url]`; `searcher.calls` records searches. `tests/test_course_graph.py`
   fakes the refinement LLM (`graph.get_client`): `messages.create` returns scripted actions, `messages.stream`
   the explanation. Test user ids must be unique across files (one shared in-memory DB).
 - New endpoints need a 401-without-login case in `tests/test_auth.py`.
+- The app's lifespan runs the migrations on the in-memory DB. The autouse `uploads` fixture points
+  `resume_parser.storage.UPLOAD_DIR` at a temp folder. `tests/resume_files.py` builds DOCX and text PDFs in
+  memory; `tests/test_resume_parser.py` has the parser's fake client (`fake`) and a valid reply (`good()`).

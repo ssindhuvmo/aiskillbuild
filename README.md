@@ -3,18 +3,20 @@
 Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full
 specification (v2).
 
-**Current status: Milestone 7 of 14** (see Milestones in `SPEC.md`):
+**Current status: Milestone 8 of 14** (see Milestones in `SPEC.md`):
 1. React + FastAPI skeleton and conversational intake — done
 2. Google sign-in with per-user sessions — done
 3. Skill-gap analysis with user corrections — done
 4. Knowledge base + ranked resources — done
 5. Resource approval, scheduler agent and roadmap with Markdown export — done
 6. Live web search + refinement chat (LangGraph) — done
-7. Design system and app shell (dark theme, sidebar, Home page, restyled pages) — built, in testing
+7. Design system and app shell (dark theme, sidebar, Home page, restyled pages) — done
+8. Expanded intake, resume upload and Career Profile (capability assessment, preferences, constraints,
+   evidence-based skill analysis with a gap chart, Alembic migrations) — built, in testing
 
-Milestone 7 is frontend only. The look follows `docs/mockups/`; parts of the mockups that belong to later
-milestones (resume upload, filters, Save / Start / Complete, task checkboxes and dates, PDF export, View Demo)
-are not built yet. Dashboard, Progress Review, Job Match and Resume Optimizer are placeholders in the sidebar.
+The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (resource filters,
+Save / Start / Complete, task checkboxes and dates, PDF export, View Demo) are not built yet. Dashboard,
+Progress Review, Job Match and Resume Optimizer are placeholders in the sidebar.
 
 ## Google sign-in setup (once)
 
@@ -45,17 +47,30 @@ The backend refuses to start without `GOOGLE_CLIENT_ID` and `SESSION_SECRET`.
 Run tests (venv active): `pytest`. Google token verification is mocked, so tests need no network.
 
 The SQLite file `backend/career_strategist.db` is created on first start. Secrets are read only by the backend.
-There are no migrations yet: new tables are created on start, but if a milestone changes an existing table,
-delete `career_strategist.db` and restart. (Milestones 4 and 5 only add tables — `resource_lists`,
-`approved_lists`, `roadmaps` — so an existing milestone 3 database keeps working. Milestone 6 changes no
-tables.)
+
+**Migrations (Alembic, from milestone 8).** The backend runs `alembic upgrade head` itself on start, so an
+existing database is upgraded in place and keeps its data. A database made before milestone 8 (tables but no
+`alembic_version`) is first stamped at the baseline, then upgraded: the old AI-experience answer becomes the
+Machine Learning and AI / LLMs ratings, and profiles that now miss required answers are un-confirmed. To run
+migrations by hand (venv active, in `backend/`): `alembic upgrade head`. For a schema change, edit
+`core/models.py`, then `alembic revision --autogenerate -m "what changed"`, review the generated file in
+`migrations/versions/` and restart.
+
+**Backup and rollback.** Before applying a pending migration to the SQLite file, the backend copies it to
+`backend/career_strategist.backup.db` (the log says so). An existing backup is never overwritten, so it
+keeps the copy made before the first migration. To roll back: stop the backend, copy
+`career_strategist.backup.db` over `career_strategist.db`, and start the previous code version. Delete the
+backup when you no longer need it, so the next migration makes a fresh one.
+
+**Uploads.** Resumes are stored under `backend/uploads/<user id>/` (`UPLOAD_DIR` in `.env`; gitignored) and
+are never served back to the browser. **Start over** deletes the user's folder.
 
 The course search graph keeps each user's paused refinement chat in a second SQLite file,
 `backend/graph_checkpoints.db` (`CHECKPOINT_DB` in `.env`), also created on first use. A resource list built
 before milestone 6 has no chat yet, so the Resources page asks you to rebuild it once.
 
-**Full dev reset:** stop the backend and delete both `backend/career_strategist.db` and
-`backend/graph_checkpoints.db`, then restart. Deleting only one leaves them out of step: lists without a chat
+**Full dev reset:** stop the backend and delete `backend/career_strategist.db`,
+`backend/graph_checkpoints.db` and the `backend/uploads/` folder, then restart. Deleting only one leaves them out of step: lists without a chat
 (the page asks you to rebuild), or chats for users who no longer have a list.
 
 ### Live web search
@@ -109,11 +124,22 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
 1. Start both servers and open http://localhost:5173. On the Home page click **Start Assessment**, then
    **Sign in with Google**; you land on **Intake**. The sidebar (a **Menu** button on a phone) moves between
    pages and shows your profile, **Start over** and **Sign out**.
-2. Chat through the five inputs (try an invalid answer like "50 hours/week" to see follow-ups).
-3. Review the profile summary, edit if needed, click **Confirm**.
+2. Chat through the eight questions ("Question N of 8" above the chat): career goal (or **Help me choose**
+   for 2–3 suggested roles after your background), resume, current role / experience / industry, weekly
+   hours, the capability assessment, learning preferences, budget and constraints, anything else. The steps
+   with options show buttons under the chat; you can also type. Try an invalid answer like "50 hours/week".
+   - **With a resume:** upload a PDF or DOCX (up to 5 MB). Parsing takes 10–20 seconds, then a review screen
+     shows the skills, roles, education, certifications and achievements it read. Anything the AI listed
+     that isn't in your resume's text is left out and named at the top. Fix, add or remove items and click
+     **Save**: your current role, years of experience (calculated from the role dates) and industry are
+     filled in and marked *· from resume*, and the chat asks you to confirm them.
+   - **Without a resume:** click **Skip**; the chat asks for the same details.
+3. Review the **Career Profile** card, edit any field (including ratings, preferences and constraints) or
+   **Review again** for the resume, then click **Confirm**.
 4. Click **Continue to Skill Analysis**. The analysis starts automatically and takes 20–40 seconds.
-5. Review existing skills (grouped *You said* and *Assumed*; **Why these skills** shows the reasoning),
-   missing skills, the gap table and domain AI use cases. Correct anything with the **×** on a skill
+5. Review existing skills (grouped *From your resume*, *You said* and *Assumed*; **Why these skills** shows
+   the evidence), missing skills, the gap chart (current level as a bar, target as a marker, on the same
+   None → Experienced scale as your ratings, plus Expert for targets) and domain AI use cases. Correct anything with the **×** on a skill
    ("I don't have this"), **I already know this** on a gap or a free-text note, then click
    **Update analysis**. The plan covers at most 8 gaps that fit your hours (weekly hours × 26); the rest are
    listed under **Later / optional**, where **Add to my plan** swaps one in on the next update.
@@ -125,7 +151,7 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
    **Refine your list** chat: "I prefer free ones", "add more hands-on projects", "I already know PyTorch",
    "put the Coursera one back". The list updates and the reply explains what changed. Sign out
    and back in: the list and the chat are still there. When you're happy, click **Approve list** (or say so in
-   the chat). You go to **Roadmap**, which is built right away (about 30–90 seconds).
+   the chat). You go to **Roadmap**, which is built right away (the plan in seconds, its text shortly after).
 9. Review the roadmap: three phases, six collapsible months with a theme and a highlighted milestone, weekly
    tasks with links to your approved resources, and a portfolio project per phase from your industry. The
    summary shows planned hours against your budget (weekly hours × 26 weeks); no week goes over your weekly
@@ -137,9 +163,12 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
     **Regenerate Roadmap**. Refining the list after approval asks you to approve again, and the new approval
     marks the roadmap out of date. **Start over** also clears the refinement chat.
 
-If roadmap generation fails, the backend log says why: each rejected attempt is logged with the rule it broke,
-and a reply cut off by the output limit is logged as `stop_reason=max_tokens` (see `MAX_TOKENS` in
-`backend/core/agents/scheduler/agent.py`).
+The weeks, tasks and hours of the roadmap are planned in Python and appear within a second or two; each phase's
+name, milestones, practice wording and portfolio project are then written by the AI and fill in as they arrive.
+If the AI's text for a phase fails (no API key, an API error, or a reply that fails the checks twice), that
+phase keeps plain default text and the page says so; the backend log has the reason
+(`Scheduler narrative for phase N ...`). Each run logs its timing at INFO: `Roadmap generated: plan placed in
+X s; phase N ai|default T s, ...; total T s`.
 
 Sample profiles: "Backend Engineer in FinTech → AI Engineer, Beginner, 8 hrs/week" and
 "Data Analyst in Healthcare → Data Scientist, None, 5 hrs/week".

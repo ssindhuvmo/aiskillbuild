@@ -26,7 +26,7 @@ def to_markdown(roadmap: Roadmap, profile: ProfileOut) -> str:
         lines += ["", f"### Month {month.number}: {month.theme} ({month.hours} h)", "", month.summary]
         for week in month.weeks:
             lines += ["", f"#### Week {week.number}: {week.focus} ({week.hours} h)", ""]
-            lines += [_task(t) for t in week.tasks]
+            lines += [_task(t) for t in week.tasks] or ["_Nothing planned: catch up or rest._"]
         lines += ["", f"**Milestone:** {month.milestone}"]
         phase = phase_ending.get(month.number)
         if phase:

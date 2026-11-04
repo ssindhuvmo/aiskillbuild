@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { analyzeGaps, confirmGaps, getGaps } from "../api.js";
+import { adjustGap, analyzeGaps, confirmGaps, getGaps } from "../api.js";
 import Button from "../components/Button.jsx";
 import Card from "../components/Card.jsx";
+import GapChart, { GapLegend } from "../components/GapChart.jsx";
 import Notice from "../components/Notice.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import Progress from "../components/Progress.jsx";
 import SkillBadge from "../components/SkillBadge.jsx";
 
 const PRIORITY = { high: 0, medium: 1, low: 2 };
-const PRIORITY_LABEL = { high: "High", medium: "Medium", low: "Low" };
+// Where each strength comes from, in the order the groups are shown.
+const SOURCES = {
+  resume: { label: "From your resume", caption: "From your resume", kind: "skill" },
+  user: { label: "You said", caption: "You said", kind: "skill" },
+  assumed: { label: "Assumed", caption: "Assumed from your role. Remove any that are wrong.", kind: "assumed" },
+};
 const SUBTITLE = "What already transfers, and what to close first.";
 
 function progressMessages({ target_role: role, domain }) {
@@ -24,6 +30,11 @@ function progressMessages({ target_role: role, domain }) {
 }
 
 const key = (c) => `${c.kind}:${(c.skill || c.text).toLowerCase()}`;
+// Corrections shown as removable chips; the button corrections (not needed, later, plan) have their own controls.
+const CHIP_KINDS = new Set(["knows", "lacks", "note"]);
+const firstSentence = (text) => text.split(/(?<=[.!?])\s/)[0];
+// One line on why an essential (high-priority) gap matters; the user's choice still stands.
+const essential = (g, role) => `Core to ${role}: ${firstSentence(g.why_needed)}`;
 
 export default function SkillGaps() {
   const [state, setState] = useState(null);
@@ -31,6 +42,9 @@ export default function SkillGaps() {
   const [note, setNote] = useState("");
   const [running, setRunning] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
+  const [removedNote, setRemovedNote] = useState(""); // after removing an essential gap
+  const noticeRef = useRef(null);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const autoRan = useRef(false);
@@ -68,6 +82,12 @@ export default function SkillGaps() {
       cancelled = true;
     };
   }, []);
+
+  // Bring the budget suggestion or the essential-skill note into view when one appears.
+  const suggestion = state?.suggestion;
+  useEffect(() => {
+    if (suggestion || removedNote) noticeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [suggestion, removedNote]);
 
   const plain = (children) => (
     <>
@@ -117,6 +137,26 @@ export default function SkillGaps() {
     setNote("");
   }
 
+  // A gap button: saved at once (no new analysis); queued notes stay queued.
+  async function adjust(action, gap, makeRoom = []) {
+    setAdjusting(true);
+    setError("");
+    setRemovedNote("");
+    try {
+      const s = await adjustGap(action, gap.skill, makeRoom);
+      const queued = pending.filter((c) => !state.corrections.some((x) => key(x) === key(c)));
+      setState(s);
+      setPending([...s.corrections, ...queued.filter((c) => !s.corrections.some((x) => key(x) === key(c)))]);
+      if (action === "not_needed" && gap.priority === "high") {
+        setRemovedNote(`Removed "${gap.skill}". ${essential(gap, profile.target_role)} You can restore it below.`);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAdjusting(false);
+    }
+  }
+
   async function confirm() {
     setBusy(true);
     setError("");
@@ -134,20 +174,21 @@ export default function SkillGaps() {
   const totalHours = gaps.reduce((n, g) => n + g.effort_hours, 0);
   const weeks = Math.ceil(totalHours / profile.hours_per_week);
   const later = analysis.later_gaps || [];
+  const removed = state.corrections.filter((c) => c.kind === "not_needed" && c.gap);
   const lacks = (s) => ({ kind: "lacks", skill: s.skill, text: `I don't have ${s.skill}` });
 
   // Strengths of one source as badges; the × queues an "I don't have this" correction.
-  function strengthGroup(source, caption) {
-    const list = analysis.strengths.filter((s) => (s.source === "user") === (source === "user"));
+  function strengthGroup(source) {
+    const list = analysis.strengths.filter((s) => s.source === source);
     if (list.length === 0) return null;
     return (
-      <div className="stack-tight">
-        <div className="muted">{caption}</div>
+      <div key={source} className="stack-tight">
+        <div className="muted">{SOURCES[source].caption}</div>
         <div className="badges">
           {list.map((s) => (
             <SkillBadge
               key={s.skill}
-              kind={source === "user" ? "skill" : "assumed"}
+              kind={SOURCES[source].kind}
               noted={noted.has(key(lacks(s)))}
               onRemove={() => add(lacks(s))}
               removeLabel={`I don't have ${s.skill}`}
@@ -160,50 +201,25 @@ export default function SkillGaps() {
     );
   }
 
-  // A table of gaps; `include` adds an "Add to my plan" correction for later / optional gaps.
-  function gapTable(list, include) {
-    return (
-      <div className="table-scroll">
-        <table className="table">
-          <thead>
-            <tr>
-              <th scope="col">Skill</th>
-              <th scope="col">Priority</th>
-              <th scope="col">Effort</th>
-              <th scope="col"><span className="sr-only">Corrections</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((g) => {
-              const knows = { kind: "knows", skill: g.skill, text: `I already know ${g.skill}` };
-              const want = { kind: "note", text: `Put "${g.skill}" in my plan now` };
-              return (
-                <tr key={g.skill}>
-                  <th scope="row">
-                    <strong>{g.skill}</strong>
-                    {g.domain_specific && <> <span className="pill">{profile.domain}</span></>}
-                    <p className="muted">{g.why_needed}</p>
-                  </th>
-                  <td className={`prio-${g.priority}`}>{PRIORITY_LABEL[g.priority]}</td>
-                  <td className="num">{g.effort_hours} h</td>
-                  <td>
-                    <Button variant="text" disabled={noted.has(key(knows))} onClick={() => add(knows)}>
-                      {noted.has(key(knows)) ? "Noted" : "I already know this"}
-                    </Button>
-                    {include && (
-                      <Button variant="text" disabled={noted.has(key(want))} onClick={() => add(want)}>
-                        {noted.has(key(want)) ? "Noted" : "Add to my plan"}
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
+  // Buttons per gap. Plan: know it, move to later, not needed. Later / optional: add to plan, not needed.
+  const gapButton = (action, label, g) => (
+    <Button variant="text" disabled={adjusting} aria-label={`${label}: ${g.skill}`} onClick={() => adjust(action, g)}>
+      {label}
+    </Button>
+  );
+  const planActions = (g) => (
+    <div className="gap-actions">
+      {gapButton("knows", "I already know this", g)}
+      {gapButton("later", "Move to later", g)}
+      {gapButton("not_needed", "Not needed", g)}
+    </div>
+  );
+  const laterActions = (g) => (
+    <div className="gap-actions">
+      {gapButton("plan", "Add to my plan", g)}
+      {gapButton("not_needed", "Not needed", g)}
+    </div>
+  );
 
   return (
     <>
@@ -215,7 +231,7 @@ export default function SkillGaps() {
             <Button variant="secondary" onClick={() => run(pending)} disabled={!changed && !state.stale}>
               Update analysis
             </Button>
-            <Button onClick={confirm} disabled={busy || changed || state.stale || state.confirmed}>
+            <Button onClick={confirm} disabled={busy || adjusting || changed || state.stale || state.confirmed}>
               {state.confirmed ? "Confirmed ✓" : "Confirm skills"}
             </Button>
           </>
@@ -237,15 +253,14 @@ export default function SkillGaps() {
       <Card label="Summary" outlined>
         <p className="lead">{analysis.rationale}</p>
         <p className="muted">
-          Skills marked <em>Assumed</em> are our best guess from your role, domain and AI experience. Correct anything
-          that's wrong, then update the analysis.
+          Strengths come from your resume, from what you told us, or are <em>assumed</em> from your role, industry and
+          experience. Correct anything that's wrong, then update the analysis.
         </p>
       </Card>
 
       <div className="card-row">
         <Card title="Existing skills">
-          {strengthGroup("user", "You said")}
-          {strengthGroup("assumed", "Assumed from your role. Remove any that are wrong.")}
+          {Object.keys(SOURCES).map(strengthGroup)}
           <details className="more">
             <summary>Why these skills</summary>
             <ul className="rows">
@@ -253,7 +268,7 @@ export default function SkillGaps() {
                 <li key={s.skill}>
                   <div className="row">
                     <strong>{s.skill}</strong>
-                    <span className="pill">{s.source === "user" ? "You said" : "Assumed"}</span>
+                    <span className="pill">{SOURCES[s.source].label}</span>
                     <span className="pill">{s.category}</span>
                   </div>
                   <p className="muted">{s.basis}</p>
@@ -280,11 +295,11 @@ export default function SkillGaps() {
               <Button type="submit" variant="secondary" disabled={!note.trim()}>Add</Button>
             </div>
           </form>
-          {pending.length > 0 && (
+          {pending.some((c) => CHIP_KINDS.has(c.kind)) && (
             <div className="stack-tight">
               <div className="muted">Your corrections</div>
               <div className="badges">
-                {pending.map((c) => (
+                {pending.filter((c) => CHIP_KINDS.has(c.kind)).map((c) => (
                   <SkillBadge key={key(c)} kind="plain" onRemove={() => remove(key(c))} removeLabel={`Remove correction: ${c.text}`}>
                     {c.text}
                   </SkillBadge>
@@ -298,21 +313,58 @@ export default function SkillGaps() {
       <Card>
         <div className="card-head">
           <h2>Skill gaps in your plan</h2>
-          <span className="muted">
-            {totalHours} of your {profile.hours_per_week * 26} hours · roughly {weeks} weeks at {profile.hours_per_week}{" "}
-            hrs/week
-          </span>
+          <GapLegend>
+            <span className="muted">
+              {totalHours} of your {profile.hours_per_week * 26} hours · roughly {weeks} weeks at {profile.hours_per_week}{" "}
+              hrs/week
+            </span>
+          </GapLegend>
         </div>
-        {gapTable(gaps, false)}
+        <GapChart gaps={gaps} domain={profile.domain} actions={planActions} />
+        <div ref={noticeRef}>
+          {suggestion && (
+            <Notice>
+              {suggestion.message}{" "}
+              {suggestion.fits && (
+                <Button variant="text" disabled={adjusting} onClick={() => adjust("plan", suggestion, suggestion.move)}>
+                  Move and add
+                </Button>
+              )}
+              <Button variant="text" onClick={() => setState({ ...state, suggestion: null })}>
+                {suggestion.fits ? "Cancel" : "OK"}
+              </Button>
+            </Notice>
+          )}
+          {removedNote && <Notice>{removedNote}</Notice>}
+        </div>
         {later.length > 0 && (
           <div className="stack-tight divided">
             <h3>Later / optional</h3>
             <p className="muted">
               Also useful for {profile.target_role}, but they don't fit this 6-month plan. No resources or roadmap time
-              are planned for them. Add one to your plan and update the analysis to swap it in.
+              are planned for them. Add one to your plan; if it doesn't fit your hours, we'll suggest what to move.
             </p>
-            {gapTable(later, true)}
+            <GapChart gaps={later} domain={profile.domain} actions={laterActions} />
           </div>
+        )}
+        {removed.length > 0 && (
+          <details className="more divided">
+            <summary>Removed ({removed.length})</summary>
+            <p className="muted">Marked not needed: left out of your plan, and a new analysis won't suggest them again.</p>
+            <ul className="rows">
+              {removed.map(({ gap: g }) => (
+                <li key={g.skill}>
+                  <div className="row">
+                    <strong>{g.skill}</strong>
+                    <Button variant="text" disabled={adjusting} aria-label={`Restore ${g.skill}`} onClick={() => adjust("restore", g)}>
+                      Restore
+                    </Button>
+                  </div>
+                  {g.priority === "high" && <p className="muted">{essential(g, profile.target_role)}</p>}
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </Card>
 

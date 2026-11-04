@@ -9,8 +9,7 @@ from core.agents.course_search.graph import get_graph
 from core.db import Base
 from core.models import Resume
 from tests.test_resources import fake_gaps  # noqa: F401  (fixture)
-from tests.test_roadmap import approved_user, fake  # noqa: F401  (fixture)
-from tests.test_scheduler_budget import draft
+from tests.test_roadmap import approved_user, fake, generate  # noqa: F401  (fixture)
 
 
 def row_counts(sub):
@@ -25,12 +24,11 @@ def row_counts(sub):
 
 def full_user(client, sub, fake_gaps, fake):  # noqa: F811
     """Signed in with data in every table: profile, chat, gaps, resources, approval and roadmap."""
-    ids = approved_user(client, sub, fake_gaps)
-    fake(draft(resource_id=ids[0]))
-    assert client.post("/api/roadmap/generate").status_code == 200
+    approved_user(client, sub, fake_gaps)
+    generate(client)
     with dbmod.SessionLocal() as db:
         repository.append_message(db, sub, "user", "hello")
-        # No upload endpoint yet (milestone 8): add the resume row directly.
+        # The resume row directly (tests/test_resume_api.py covers uploads and their files).
         db.add(Resume(user_id=sub, filename="cv.pdf", stored_path="", content_type="application/pdf", size=1,
                       text="", status="reviewed"))
         db.commit()

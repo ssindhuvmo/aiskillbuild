@@ -10,6 +10,8 @@ from core.agents.intake.validation import (
     validate_field,
 )
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis
+from core.agents.resume_parser.rules import years_of_experience
+from core.agents.resume_parser.schemas import ResumeData, ResumeDraft
 from core.agents.scheduler.schemas import Roadmap
 from core.knowledge.schemas import Candidate, SearchProfile
 from core.models import (
@@ -17,7 +19,8 @@ from core.models import (
     RoadmapRecord, User, WebResourceCandidate, WebSearchCache, _now,
 )
 from core.schemas import (
-    ChatMessage, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceState, RoadmapState, RoleSuggestion,
+    ChatMessage, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceState, ResumeState, RoadmapState,
+    RoleSuggestion,
 )
 
 
@@ -221,6 +224,85 @@ def get_intake_state(db: Session, user_id: str) -> IntakeState:
     )
 
 
+# --- Resume -------------------------------------------------------------------------
+
+
+def get_resume_state(db: Session, user_id: str) -> ResumeState:
+    profile = get_profile(db, user_id)
+    record = db.get(Resume, user_id)
+    if record is None:
+        return ResumeState(status="none", profile=profile)
+    if record.status == "review":
+        draft = ResumeDraft.model_validate(record.draft)
+        data, dropped = draft.data, draft.dropped
+    else:
+        data, dropped = ResumeData.model_validate(record.data), []
+    return ResumeState(
+        status=record.status, profile=profile, filename=record.filename, uploaded_at=record.uploaded_at, data=data,
+        dropped=dropped, years_experience=years_of_experience(data.roles),
+    )
+
+
+def _resume_changed(db: Session, profile: Profile) -> None:
+    """The resume feeds the profile and the gap analysis: both need confirming again."""
+    profile.confirmed = False
+    _unconfirm_gaps(db, profile)
+
+
+def save_resume_draft(
+    db: Session, user_id: str, *, filename: str, stored_path: str, content_type: str, size: int, text: str,
+    draft: ResumeDraft,
+) -> ResumeState:
+    """A new upload replaces the old one and waits for review; nothing downstream uses it yet."""
+    profile = _ensure_profile(db, user_id)
+    record = db.get(Resume, user_id)
+    if record is None:
+        record = Resume(user_id=user_id)
+        db.add(record)
+    record.filename, record.stored_path, record.content_type, record.size = filename, stored_path, content_type, size
+    record.text = text
+    record.draft = draft.model_dump()
+    record.data = None
+    record.status = "review"
+    record.uploaded_at = _now()
+    profile.resume_skipped = False
+    _resume_changed(db, profile)
+    db.add(AgentOutput(user_id=user_id, agent="resume_parser", output={"filename": filename, "draft": record.draft}))
+    db.commit()
+    return get_resume_state(db, user_id)
+
+
+def save_reviewed_resume(db: Session, user_id: str, data: ResumeData, prefill: dict) -> ResumeState:
+    """Save what the user reviewed. Profile fields that are empty or still came from the resume are
+    filled from it (marked "resume"); values the user entered are kept."""
+    record = db.get(Resume, user_id)
+    if record is None:
+        raise NotReady("Upload a resume first.")
+    record.data = data.model_dump()
+    record.draft = None
+    record.status = "reviewed"
+    profile = _ensure_profile(db, user_id)
+    sources = profile.field_sources or {}
+    updates = {f: v for f, v in prefill.items() if getattr(profile, f) in (None, "") or sources.get(f) == "resume"}
+    db.commit()
+    apply_updates(db, user_id, updates, source="resume")  # a value that fails validation is simply not filled
+    _resume_changed(db, profile)
+    db.commit()
+    return get_resume_state(db, user_id)
+
+
+def delete_resume(db: Session, user_id: str) -> None:
+    """Remove the resume row. Values it filled stay in the profile but are no longer labelled as from it."""
+    record = db.get(Resume, user_id)
+    if record is None:
+        return
+    db.delete(record)
+    profile = _ensure_profile(db, user_id)
+    profile.field_sources = {f: s for f, s in (profile.field_sources or {}).items() if s != "resume"}
+    _resume_changed(db, profile)
+    db.commit()
+
+
 # --- Skill-gap analysis -------------------------------------------------------------
 
 
@@ -287,6 +369,17 @@ def save_gap_analysis(
             output={"input": snapshot, "corrections": record.corrections, "analysis": data},
         )
     )
+    db.commit()
+    return get_gap_state(db, user_id)
+
+
+def update_gap_analysis(db: Session, user_id: str, analysis: GapAnalysis, corrections: list[Correction]) -> GapState:
+    """Save the user's direct edits (Skill Analysis buttons). The snapshot stays: the edits do not change
+    what the analysis is based on, but the skills must be confirmed again."""
+    record = db.get(GapAnalysisRecord, user_id)
+    record.analysis = analysis.model_dump()
+    record.corrections = [c.model_dump() for c in corrections]
+    _unconfirm_gaps(db, _ensure_profile(db, user_id))
     db.commit()
     return get_gap_state(db, user_id)
 
@@ -476,7 +569,9 @@ def get_roadmap_state(db: Session, user_id: str) -> RoadmapState:
     )
 
 
-def save_roadmap(db: Session, user_id: str, roadmap: Roadmap, snapshot: dict) -> RoadmapState:
+def save_roadmap(db: Session, user_id: str, roadmap: Roadmap, snapshot: dict, log: bool = True) -> RoadmapState:
+    """Replace the user's roadmap. log=False for a plan whose text is still being written (update_roadmap logs
+    the finished one)."""
     data = roadmap.model_dump(mode="json")
     record = db.get(RoadmapRecord, user_id)
     if record is None:
@@ -484,6 +579,21 @@ def save_roadmap(db: Session, user_id: str, roadmap: Roadmap, snapshot: dict) ->
         db.add(record)
     record.roadmap = data
     record.snapshot = snapshot
-    db.add(AgentOutput(user_id=user_id, agent="scheduler", output={"input": snapshot, "roadmap": data}))
+    if log:
+        db.add(AgentOutput(user_id=user_id, agent="scheduler", output={"input": snapshot, "roadmap": data}))
+    db.commit()
+    return get_roadmap_state(db, user_id)
+
+
+def update_roadmap(db: Session, user_id: str, roadmap: Roadmap, log_snapshot: dict | None = None) -> RoadmapState | None:
+    """Save new text into the existing roadmap (snapshot unchanged); None if it was deleted meanwhile ("Start
+    over"). With log_snapshot, the finished roadmap is logged to agent_outputs."""
+    record = db.get(RoadmapRecord, user_id)
+    if record is None:
+        return None
+    data = roadmap.model_dump(mode="json")
+    record.roadmap = data
+    if log_snapshot is not None:
+        db.add(AgentOutput(user_id=user_id, agent="scheduler", output={"input": log_snapshot, "roadmap": data}))
     db.commit()
     return get_roadmap_state(db, user_id)

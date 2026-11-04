@@ -21,7 +21,7 @@ def cand(resource, match=1.0, matched_on=("machine-learning",)):
 
 def gap(skill="ML basics", effort=20, priority="high"):
     return Gap(skill=skill, category="technical", why_needed="w", priority=priority, effort_hours=effort,
-               domain_specific=False)
+               domain_specific=False, current_level="Beginner", target_level="Intermediate")
 
 
 def test_weights_sum_to_one():

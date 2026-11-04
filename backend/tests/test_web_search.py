@@ -10,7 +10,7 @@ from core.agents.gap_analysis.schemas import Gap
 from core.knowledge.schemas import Candidate, Resource, SearchProfile
 
 GAP = Gap(skill="Vector databases", category="technical", why_needed="Needed for retrieval.", priority="high",
-          effort_hours=20, domain_specific=False)
+          effort_hours=20, domain_specific=False, current_level="None", target_level="Intermediate")
 PROFILE = SearchProfile(ai_level="Beginner", domain="FinTech", hours_per_week=8)
 
 

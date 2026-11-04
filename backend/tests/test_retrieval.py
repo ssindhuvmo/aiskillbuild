@@ -19,7 +19,7 @@ PROFILE = SearchProfile(ai_level="Beginner", domain="FinTech", hours_per_week=8)
 
 def gap(skill, why="Needed for the role.", domain_specific=False):
     return Gap(skill=skill, category="technical", why_needed=why, priority="high", effort_hours=20,
-               domain_specific=domain_specific)
+               domain_specific=domain_specific, current_level="Beginner", target_level="Intermediate")
 
 
 def resource(id, skills, domains=()):

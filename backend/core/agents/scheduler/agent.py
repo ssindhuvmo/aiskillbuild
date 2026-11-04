@@ -1,112 +1,70 @@
 """Scheduler agent: turns the approved resource list into a 6-month roadmap.
 
-One structured-output call returns a RoadmapDraft. Pydantic validates it and budget.check_budget
-enforces the calendar and the hour budget; a rejected attempt is retried with the problems fed
-back. Transport errors (429/5xx/connection) are retried separately by the SDK client.
+Python builds the plan (placement.place) and budget.check_budget asserts it; it is saved and sent at once.
+Then the three phases' text is written by the LLM in parallel (narrative.write), and each phase is applied,
+saved and streamed as it arrives. A phase whose text fails keeps placement's default text, so generating
+never fails because of the LLM. The routes call only check_ready, state_for_user and generate.
 """
-import json
 import logging
-from pathlib import Path
+import threading
+import time
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from anthropic import transform_schema
-from pydantic import ValidationError
+import anthropic
 from sqlalchemy.orm import Session
 
 from core import repository
-from core.agents.scheduler.budget import MONTH_WEEKS, WEEKS, budget, check_budget, finalize, month_weeks
-from core.agents.scheduler.schemas import Roadmap, RoadmapDraft, SchedulerInput
-from core.llm import MODEL, get_client
+from core.agents.scheduler import narrative
+from core.agents.scheduler.budget import check_budget
+from core.agents.scheduler.placement import place
+from core.agents.scheduler.schemas import Roadmap, SchedulerInput
+from core.db import SessionLocal
+from core.llm import LLMUnavailable, friendly_error
 from core.schemas import RoadmapState
 
 log = logging.getLogger(__name__)
 
-PROMPT = (Path(__file__).parent / "prompt.md").read_text(encoding="utf-8")
-MAX_ATTEMPTS = 3
-# A 26-week roadmap is about 3-5k output tokens, so this leaves ample room. The SDK refuses
-# non-streaming requests above ~21k; going higher means switching this call to streaming.
-MAX_TOKENS = 20000
-OUTPUT_FORMAT = {"type": "json_schema", "schema": transform_schema(RoadmapDraft)}
-
-
-class SchedulerFailed(Exception):
-    pass
-
-
-class SchedulerTruncated(SchedulerFailed):
-    """The reply hit MAX_TOKENS before the roadmap was complete."""
+_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
 
 
 class ListNotApproved(Exception):
     pass
 
 
-def _request(data: SchedulerInput, problems: list[str]) -> str:
-    profile = data.model_dump(include={"current_role", "target_role", "ai_level", "capabilities", "domain"})
-    gaps = [g.model_dump(include={"skill", "priority", "effort_hours", "domain_specific"}) for g in data.gaps]
-    resources = [
-        {
-            **r.resource.model_dump(include={"id", "title", "format", "level", "hours", "description"}),
-            "for_gaps": r.gaps,
-            "priority": r.priority,
-        }
-        for r in data.resources
-    ]
-    calendar = "\n".join(
-        f"- Month {m}: weeks {month_weeks(m)[0]}-{month_weeks(m)[-1]}" for m in range(1, len(MONTH_WEEKS) + 1)
-    )
-    limit = data.hours_per_week
-    text = (
-        f"Profile:\n{json.dumps(profile, indent=2)}\n\n"
-        f"Skill gaps:\n{json.dumps(gaps, indent=2)}\n\n"
-        f"Domain AI use cases:\n{json.dumps([u.model_dump() for u in data.domain_use_cases], indent=2)}\n\n"
-        f"Approved resources ({sum(r.resource.hours for r in data.resources)} hours in total):\n"
-        f"{json.dumps(resources, indent=2)}\n\n"
-        f"Calendar ({WEEKS} weeks):\n{calendar}\n\n"
-        f"Weekly limit: {limit} hours. Total budget: {budget(limit)} hours."
-    )
-    if problems:
-        text += "\n\nYour previous roadmap was rejected:\n- " + "\n- ".join(problems)
-        text += "\nReturn a complete, corrected roadmap."
-    return text
+class AlreadyRunning(Exception):
+    pass
 
 
-def build(data: SchedulerInput) -> Roadmap:
-    """Return a roadmap that passed check_budget, or raise SchedulerFailed after MAX_ATTEMPTS.
-    A truncated reply raises SchedulerTruncated at once: retrying with the same limit would cut
-    off again. LLM errors (missing key, auth, rate limit) propagate for the caller to report."""
-    client = get_client()
-    problems: list[str] = []
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=PROMPT,
-            messages=[{"role": "user", "content": _request(data, problems)}],
-            output_config={"format": OUTPUT_FORMAT},
-        )
-        # Checked before parsing: a cut-off reply is incomplete JSON, not an invalid roadmap.
-        if response.stop_reason == "max_tokens":
-            log.error(
-                "Scheduler reply truncated: stop_reason=max_tokens at max_tokens=%d (model %s, attempt %d). "
-                "Raise MAX_TOKENS (with streaming) or generate the roadmap month by month.",
-                MAX_TOKENS, MODEL, attempt,
-            )
-            raise SchedulerTruncated(f"The roadmap was cut off at {MAX_TOKENS} output tokens.")
-        text = next((b.text for b in response.content if b.type == "text"), "")
-        try:
-            draft = RoadmapDraft.model_validate_json(text)
-            problems = check_budget(draft, data)
-        except ValidationError as e:
-            problems = [f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors()[:10]]
-        if not problems:
-            return finalize(draft, data)
-        log.warning("Scheduler attempt %d of %d rejected (stop_reason=%s): %s", attempt, MAX_ATTEMPTS, response.stop_reason, "; ".join(problems))
-    raise SchedulerFailed("; ".join(problems))
+class PlacementFailed(Exception):
+    """check_budget rejected a placed plan: a bug in placement, never an LLM problem."""
 
 
-def run_for_user(db: Session, user_id: str) -> RoadmapState:
-    """Build and save the roadmap for the user's approved resource list."""
-    gap_state = repository.get_gap_state(db, user_id)  # commits, so no DB lock is held during the LLM call
+def _lock(user_id: str) -> threading.Lock:
+    with _locks_guard:
+        return _locks.setdefault(user_id, threading.Lock())
+
+
+def check_ready(db: Session, user_id: str) -> None:
+    if repository.get_approved_list(db, user_id) is None:
+        raise ListNotApproved("Approve your resource list on the Resources step first.")
+    if _lock(user_id).locked():
+        raise AlreadyRunning("Your roadmap is already being built. Wait for it to finish.")
+
+
+def state_for_user(db: Session, user_id: str) -> RoadmapState:
+    """The saved roadmap. A phase left "pending" by an interrupted run (e.g. a server restart) shows as default."""
+    state = repository.get_roadmap_state(db, user_id)
+    if state.roadmap and not _lock(user_id).locked():
+        for phase in state.roadmap.phases:
+            if phase.narrative == "pending":
+                phase.narrative = "default"
+    return state
+
+
+def _input(db: Session, user_id: str) -> tuple[SchedulerInput, dict]:
+    gap_state = repository.get_gap_state(db, user_id)
     approved = repository.get_approved_list(db, user_id)
     if approved is None:
         raise ListNotApproved("Approve your resource list on the Resources step first.")
@@ -116,5 +74,79 @@ def run_for_user(db: Session, user_id: str) -> RoadmapState:
         domain_use_cases=gap_state.analysis.domain_use_cases,
         resources=approved.resources,
     )
-    snapshot = repository.roadmap_snapshot(gap_state.profile, approved)
-    return repository.save_roadmap(db, user_id, build(data), snapshot)
+    return data, repository.roadmap_snapshot(gap_state.profile, approved)
+
+
+def build(data: SchedulerInput) -> Roadmap:
+    """The placed plan with default text, checked against the budget rules."""
+    roadmap = place(data)
+    if problems := check_budget(roadmap, data):
+        log.error("Scheduler placement broke the budget rules: %s", "; ".join(problems))
+        raise PlacementFailed("Something went wrong while planning your weeks. Please try again.")
+    return roadmap
+
+
+def _event(state: RoadmapState | None, **extra) -> dict:
+    return {"type": "state", **({"state": state.model_dump(mode="json")} if state else {}), **extra}
+
+
+def generate(user_id: str) -> Iterator[dict]:
+    """SSE events: `state` with the placed roadmap, then one `state` per phase as its text arrives (`phase`,
+    and `notice` when the default text was kept), then `done`; `error` if the plan can't be built.
+    Opens its own DB session (it outlives the request)."""
+    lock = _lock(user_id)
+    if not lock.acquire(blocking=False):
+        yield {"type": "error", "message": "Your roadmap is already being built. Wait for it to finish."}
+        return
+    db = SessionLocal()
+    pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="roadmap-narrative")
+    roadmap = None
+    started = time.monotonic()
+    timings: list[str] = []
+    try:
+        try:
+            data, snapshot = _input(db, user_id)
+            roadmap = build(data)
+        except (ListNotApproved, PlacementFailed) as e:
+            yield {"type": "error", "message": str(e)}
+            return
+        yield _event(repository.save_roadmap(db, user_id, roadmap, snapshot, log=False))
+        placed = time.monotonic() - started
+
+        futures = {
+            pool.submit(narrative.write, data, roadmap.model_copy(deep=True), phase): phase.number
+            for phase in roadmap.phases
+        }
+        for future in as_completed(futures):
+            number, notice = futures[future], None
+            try:
+                narrative.apply(roadmap, number, future.result())
+            except narrative.NarrativeFailed:
+                notice = f"The AI's text for phase {number} didn't pass the checks, so it shows plain text."
+            except (LLMUnavailable, anthropic.APIError) as e:
+                notice = f"Phase {number} shows plain text: {friendly_error(e)}"
+            except Exception:
+                log.exception("Scheduler narrative for phase %d failed", number)
+                notice = f"Phase {number} shows plain text: {friendly_error(Exception())}"
+            if notice:
+                narrative.use_default(roadmap, number)
+            timings.append(f"phase {number} {roadmap.phases[number - 1].narrative} {time.monotonic() - started:.1f} s")
+            last = all(p.narrative != "pending" for p in roadmap.phases)
+            state = repository.update_roadmap(db, user_id, roadmap, log_snapshot=snapshot if last else None)
+            yield _event(state, phase=number, notice=notice)
+        log.info("Roadmap generated: plan placed in %.2f s; %s; total %.1f s",
+                 placed, ", ".join(timings), time.monotonic() - started)
+        yield {"type": "done"}
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+        # The client went away (or something failed) before every phase arrived: keep the default text.
+        if roadmap is not None and any(p.narrative == "pending" for p in roadmap.phases):
+            for phase in roadmap.phases:
+                if phase.narrative == "pending":
+                    narrative.use_default(roadmap, phase.number)
+            try:
+                repository.update_roadmap(db, user_id, roadmap)
+            except Exception:
+                log.exception("Could not save the roadmap's default text")
+        db.close()
+        lock.release()

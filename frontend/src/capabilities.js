@@ -1,5 +1,7 @@
 // Career Profile options. Must match backend/core/agents/intake/validation.py.
 export const LEVELS = ["None", "Beginner", "Intermediate", "Experienced"];
+// Skill-gap targets may go one step beyond the ratings (gap_analysis/schemas.py).
+export const TARGET_LEVELS = [...LEVELS, "Expert"];
 
 export const CAPABILITY_AREAS = {
   python: "Python",

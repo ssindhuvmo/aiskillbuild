@@ -175,6 +175,17 @@ input:disabled, select:disabled { opacity: .6; }
 .field-group { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .field-group legend { padding: 0; margin-bottom: 8px; font-size: 12px; color: var(--color-text-muted); }
 .source { color: var(--color-accent); }
+.file-name { overflow-wrap: anywhere; }
+.inline-btn { padding: 0; }
+
+/* --- Resume upload and review -------------------------------------------------------- */
+.file-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border: 1px dashed var(--color-border-strong); border-radius: var(--radius-card); }
+.file-card-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.file-card-info svg { flex: 0 0 auto; color: var(--color-success); }
+.file-card-name { color: var(--color-text-strong); font-weight: 500; overflow-wrap: anywhere; }
+.review-section { padding-top: 16px; border-top: 1px solid var(--color-border); }
+.edit-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.edit-row .field { flex: 1 1 160px; min-width: 0; }
 .plain-list { list-style: none; margin: 0; padding: 0; }
 
 /* --- Tables and lists ----------------------------------------------------------------- */
@@ -188,8 +199,18 @@ input:disabled, select:disabled { opacity: .6; }
 .table .num { white-space: nowrap; color: var(--color-text-soft); }
 .table .btn { min-height: 0; padding: 4px 0 4px 12px; font-size: var(--text-small); white-space: nowrap; }
 .rows { list-style: none; margin: 0; padding: 0; }
+.gap-col { width: 34%; }
+.gap-bar { position: relative; height: 10px; margin-top: 6px; background: var(--color-bg); border-radius: var(--radius-pill); }
+.gap-current { display: block; height: 100%; background: var(--color-primary); border-radius: var(--radius-pill); }
+.gap-target { position: absolute; left: 0; top: -4px; height: 18px; border-right: 2px solid var(--color-text-strong); }
+.gap-levels { margin-top: 6px; }
+.gap-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: var(--text-small); }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-current { width: 14px; height: 10px; background: var(--color-primary); border-radius: 2px; }
+.legend-target { width: 2px; height: 14px; background: var(--color-text-strong); }
 .rows > li { padding: 12px 0; border-top: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 4px; }
 .more summary { min-height: var(--control-min-height); display: inline-flex; align-items: center; cursor: pointer; color: var(--color-accent); font-size: var(--text-small); }
+.gap-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .plain-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 
 /* --- Resources ------------------------------------------------------------------------ */

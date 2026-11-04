@@ -3,13 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from core import repository
-from core.agents.gap_analysis import agent
+from core.agents.gap_analysis import adjust, agent
 from core.auth import current_user
 from core.db import get_db
 from core.llm import LLMUnavailable, friendly_error
 from core.models import User
 from core.repository import ValidationFailed
-from core.schemas import AnalyzeIn, GapState
+from core.schemas import AdjustIn, AnalyzeIn, GapState
 
 router = APIRouter(prefix="/api/gaps")
 
@@ -38,3 +38,14 @@ def confirm(user: User = Depends(current_user), db: Session = Depends(get_db)):
         return repository.confirm_gaps(db, user.user_id)
     except ValidationFailed as e:
         raise HTTPException(409, e.errors["analysis"])
+
+
+@router.post("/adjust", response_model=GapState)
+def adjust_gaps(body: AdjustIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """A Skill Analysis button: I already know this, Not needed, Move to later, Add to my plan, Restore."""
+    try:
+        return adjust.adjust_for_user(db, user.user_id, body.action, body.skill, body.make_room)
+    except agent.ProfileNotConfirmed as e:
+        raise HTTPException(409, str(e))
+    except adjust.AdjustRefused as e:
+        raise HTTPException(422, str(e))

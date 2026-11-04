@@ -1,5 +1,6 @@
 .env
 backend/.env
+backend/uploads/
 frontend/.env
 *.db
 *.db-shm

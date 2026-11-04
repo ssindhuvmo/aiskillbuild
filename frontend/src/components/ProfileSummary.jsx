@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CAPABILITY_AREAS, describeConstraints, describePreferences, ratedCount } from "../capabilities.js";
 import { confirmProfile, getDomains, updateProfile } from "../api.js";
+import { ProfileContext } from "../profileContext.js";
 import Button from "./Button.jsx";
 import Card from "./Card.jsx";
 import { CapabilityRatings, cleanConstraints, ConstraintsInput, PreferenceChips } from "./ProfileInputs.jsx";
+import { resumeCounts } from "./ResumeUpload.jsx";
 
 const AREAS = Object.keys(CAPABILITY_AREAS);
-
-const RESUME = { review: "Waiting for your review", reviewed: "Reviewed" };
 
 // What the card shows for each field; `empty` is the text while it has no value.
 const ROWS = [
@@ -30,7 +30,7 @@ function Capabilities({ value }) {
   if (rated === 0) return <dd className="empty">Not rated yet</dd>;
   return (
     <dd>
-      {rated < AREAS.length && <div className="muted">{rated} of {AREAS.length} rated</div>}
+      <div className={rated < AREAS.length ? "muted" : ""}>{rated} of {AREAS.length} rated</div>
       <ul className="plain-list">
         {AREAS.filter((a) => value[a]).map((a) => <li key={a}>{CAPABILITY_AREAS[a]}: {value[a]}</li>)}
       </ul>
@@ -38,8 +38,23 @@ function Capabilities({ value }) {
   );
 }
 
-// The Profile Card: what the intake has collected so far, with Edit and Confirm.
-export default function ProfileSummary({ profile, onChange }) {
+function Resume({ resume, profile, onReview }) {
+  if (resume.status === "none") return <dd className="empty">{profile.resume_skipped ? "Skipped" : "Not uploaded"}</dd>;
+  return (
+    <dd>
+      <div className="file-name">{resume.filename}</div>
+      <div className="muted">
+        {resume.status === "review" ? "Waiting for your review" : `Read: ${resumeCounts(resume.data)}`}
+      </div>
+      {onReview && resume.status === "reviewed" && <Button variant="text" className="inline-btn" onClick={onReview}>Review again</Button>}
+    </dd>
+  );
+}
+
+// The Career Profile card: what the intake has collected so far, with Edit and Confirm. Editable
+// at any time; an edit un-confirms the profile and marks later steps out of date.
+export default function ProfileSummary({ profile, resume, onChange, onReviewResume }) {
+  const { user } = useContext(ProfileContext);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [domains, setDomains] = useState([]);
@@ -99,7 +114,7 @@ export default function ProfileSummary({ profile, onChange }) {
   const fromResume = (k) => profile.field_sources[k] === "resume" && <span className="source"> · from resume</span>;
 
   return (
-    <Card as="aside" title="Profile summary" aria-label="Profile summary" className="split-side">
+    <Card as="aside" title="Career Profile" aria-label="Career Profile" className="split-side">
       {editing ? (
         <>
           <label className="field">Target role<input value={form.target_role ?? ""} onChange={set("target_role")} /></label>
@@ -134,6 +149,12 @@ export default function ProfileSummary({ profile, onChange }) {
       ) : (
         <>
           <dl className="fields">
+            {user?.name && (
+              <div>
+                <dt>Name</dt>
+                <dd>{user.name}</dd>
+              </div>
+            )}
             {ROWS.map(({ key, label, show = (v) => v, empty = "Not collected yet" }) => (
               <div key={key}>
                 <dt>{label}{fromResume(key)}</dt>
@@ -146,9 +167,7 @@ export default function ProfileSummary({ profile, onChange }) {
             ))}
             <div>
               <dt>Resume</dt>
-              <dd className={profile.resume_status ? "" : "empty"}>
-                {RESUME[profile.resume_status] ?? (profile.resume_skipped ? "Skipped" : "Not uploaded")}
-              </dd>
+              <Resume resume={resume} profile={profile} onReview={onReviewResume} />
             </div>
           </dl>
           {error && <p className="error" role="alert">{error}</p>}

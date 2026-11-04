@@ -22,6 +22,7 @@ dbmod.SessionLocal.configure(bind=dbmod.engine)
 from app.main import app  # noqa: E402
 from core import auth  # noqa: E402
 from core.agents.course_search import verify, web  # noqa: E402
+from core.agents.resume_parser import storage  # noqa: E402
 from core.models import WebResourceCandidate, WebSearchCache  # noqa: E402
 
 
@@ -69,6 +70,14 @@ def searcher(monkeypatch):
     monkeypatch.setattr(web, "get_searcher", lambda: fake)
     monkeypatch.setattr(verify, "get_checker", lambda: lambda url: (fake.link_status.get(url, "ok"), "fake"))
     return fake
+
+
+@pytest.fixture(autouse=True)
+def uploads(monkeypatch, tmp_path):
+    """Uploaded resumes go to a temporary folder."""
+    folder = tmp_path / "uploads"
+    monkeypatch.setattr(storage, "UPLOAD_DIR", folder)
+    return folder
 
 
 @pytest.fixture()

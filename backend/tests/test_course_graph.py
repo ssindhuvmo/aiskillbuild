@@ -12,15 +12,15 @@ from core import db as dbmod
 from core.agents.course_search import agent, graph
 from core.agents.course_search.web import web_id
 from core.agents.gap_analysis.schemas import Gap
-from core.agents.scheduler import agent as scheduler
+from core.agents.scheduler import narrative as scheduler
 from core.knowledge.retriever import get_retriever
 from core.knowledge.schemas import Candidate, Resource, SearchProfile
 from core.models import ApprovedListRecord, WebResourceCandidate, WebSearchCache
 from tests.conftest import login
 from tests.test_gap_analysis import analysis, confirmed_user, gap
 from tests.test_resources import fake_gaps, ids_of  # noqa: F401  (fixture)
+from tests.test_roadmap import generate, phase_reply
 from tests.test_scheduler_budget import FakeClient as FakeScheduler
-from tests.test_scheduler_budget import draft
 
 # The knowledge base has plenty for the first gap, none passing the relevance gate for the second
 # (pci-dss is only 1 of its 1.5 tag weight) and nothing at all for the third.
@@ -291,10 +291,12 @@ def test_approval_by_button_and_by_chat_feeds_the_scheduler(anon, fake_gaps, sea
         assert a in [r["resource"]["id"] for r in record.items["resources"]]  # web results are approved in full
 
     # The scheduler reads that list unchanged; links come from it.
-    monkeypatch.setattr(scheduler, "get_client", lambda: FakeScheduler([draft(resource_id=a), draft(resource_id=a)]))
-    roadmap = anon.post("/api/roadmap/generate").json()
+    monkeypatch.setattr(scheduler, "get_client", lambda: FakeScheduler([phase_reply] * 6))
+    roadmap = generate(anon)[1]
     assert roadmap["stale"] is False
-    assert roadmap["roadmap"]["months"][0]["weeks"][0]["tasks"][0]["resource"]["url"] == "https://example.com/a"
+    links = {t["resource"]["id"]: t["resource"]["url"] for m in roadmap["roadmap"]["months"] for w in m["weeks"]
+             for t in w["tasks"] if t["resource"]}
+    assert links[a] == "https://example.com/a"  # placed by Python, linked from the approved web result
 
     # Refining after approval: the approval is out of date until the user approves again (here by chat).
     b = web_id("https://example.com/b")
@@ -304,7 +306,7 @@ def test_approval_by_button_and_by_chat_feeds_the_scheduler(anon, fake_gaps, sea
     _, reply, state = chat(anon, "looks good, approve it")
     assert "approved" in reply and state["approval_stale"] is False and b not in state["approved_ids"]
     assert anon.get("/api/roadmap").json()["stale"] is True  # built from the earlier approval
-    assert anon.post("/api/roadmap/generate").json()["stale"] is False
+    assert generate(anon)[1]["stale"] is False
 
 
 def test_chat_needs_a_current_list(anon, fake_gaps, searcher, llm):  # noqa: F811
