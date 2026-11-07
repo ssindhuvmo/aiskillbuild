@@ -13,14 +13,14 @@ from core.agents.gap_analysis.schemas import Correction, GapAnalysis
 from core.agents.resume_parser.rules import years_of_experience
 from core.agents.resume_parser.schemas import ResumeData, ResumeDraft
 from core.agents.scheduler.schemas import Roadmap
-from core.knowledge.schemas import Candidate, SearchProfile
+from core.knowledge.schemas import Candidate, Resource, SearchProfile
 from core.models import (
-    AgentOutput, ApprovedListRecord, Conversation, GapAnalysisRecord, Profile, ResourceListRecord, Resume,
-    RoadmapRecord, User, WebResourceCandidate, WebSearchCache, _now,
+    AgentOutput, ApprovedListRecord, Conversation, GapAnalysisRecord, Profile, ResourceListRecord, ResourceProgress,
+    Resume, RoadmapRecord, User, WebResourceCandidate, WebSearchCache, _now,
 )
 from core.schemas import (
-    ChatMessage, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceState, ResumeState, RoadmapState,
-    RoleSuggestion,
+    ChatMessage, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceProgressOut, ResourceState, ResumeState,
+    RoadmapState, RoleSuggestion,
 )
 
 
@@ -52,8 +52,8 @@ def delete_user_data(db: Session, user_id: str) -> None:
     """Start over: delete everything saved for this user. The user row stays, so the sign-in
     keeps working. Any new table with a user_id must be added here."""
     for model in (
-        RoadmapRecord, ApprovedListRecord, ResourceListRecord, GapAnalysisRecord, AgentOutput, Conversation, Resume,
-        Profile,
+        RoadmapRecord, ApprovedListRecord, ResourceListRecord, ResourceProgress, GapAnalysisRecord, AgentOutput,
+        Conversation, Resume, Profile,
     ):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     db.commit()
@@ -400,7 +400,9 @@ def confirm_gaps(db: Session, user_id: str) -> GapState:
 
 def search_profile(profile: ProfileOut) -> SearchProfile:
     return SearchProfile(
-        ai_level=profile.ai_level, domain=profile.domain, hours_per_week=profile.hours_per_week
+        ai_level=profile.ai_level, domain=profile.domain, hours_per_week=profile.hours_per_week,
+        preferences=profile.learning_preferences or [],
+        free_only=(profile.constraints or {}).get("budget") == "free_only",
     )
 
 
@@ -420,8 +422,12 @@ def get_resource_state(db: Session, user_id: str) -> ResourceState:
     gap_state = get_gap_state(db, user_id)
     ready = _gaps_ready(gap_state)
     record = db.get(ResourceListRecord, user_id)
+    common = {
+        "profile": gap_state.profile, "gaps_confirmed": ready, "progress": get_progress(db, user_id),
+        "free_only": (gap_state.profile.constraints or {}).get("budget") == "free_only",
+    }
     if record is None:
-        return ResourceState(status="none", profile=gap_state.profile, gaps_confirmed=ready)
+        return ResourceState(status="none", **common)
     snapshot = _resource_snapshot(gap_state)
     approval = db.get(ApprovedListRecord, user_id)
     resources = ResourceList.model_validate(record.items)
@@ -429,8 +435,7 @@ def get_resource_state(db: Session, user_id: str) -> ResourceState:
     approved_ids = [r["resource"]["id"] for r in approval.items["resources"]] if approval else None
     return ResourceState(
         status="ready",
-        profile=gap_state.profile,
-        gaps_confirmed=ready,
+        **common,
         resources=resources,
         stale=not ready or record.snapshot != snapshot,
         approved_ids=approved_ids,
@@ -451,6 +456,46 @@ def save_resource_list(db: Session, user_id: str, resources: ResourceList, gap_s
     db.add(AgentOutput(user_id=user_id, agent="course_search", output={"input": snapshot, "resources": items}))
     db.commit()
     return get_resource_state(db, user_id)
+
+
+# --- Resource progress (Save / Start / Complete) -----------------------------------
+
+
+def get_progress(db: Session, user_id: str) -> list[ResourceProgressOut]:
+    rows = db.query(ResourceProgress).filter_by(user_id=user_id).order_by(ResourceProgress.updated_at.desc()).all()
+    return [
+        ResourceProgressOut(resource=Resource.model_validate(r.resource), saved=r.saved, status=r.status,
+                            started_at=r.started_at, completed_at=r.completed_at)
+        for r in rows
+    ]
+
+
+def set_progress(db: Session, user_id: str, resource: Resource, saved: bool | None, status: str | None) -> None:
+    """Record one click. The resource comes from the server's own list (or the existing row), never the
+    browser. Started and completed times are kept for later progress reviews."""
+    row = db.get(ResourceProgress, (user_id, resource.id))
+    if row is None:
+        row = ResourceProgress(user_id=user_id, resource_id=resource.id, saved=False, status="not_started")
+        db.add(row)
+    row.resource = resource.model_dump(mode="json")
+    if saved is not None:
+        row.saved = saved
+    if status is not None and status != row.status:
+        row.status = status
+        if status == "not_started":
+            row.started_at = row.completed_at = None
+        elif status == "started":
+            row.started_at, row.completed_at = _now(), None
+        else:
+            row.started_at = row.started_at or _now()
+            row.completed_at = _now()
+    row.updated_at = _now()
+    if not row.saved and row.status == "not_started":
+        if row in db.new:
+            db.expunge(row)
+        else:
+            db.delete(row)
+    db.commit()
 
 
 # --- Web search cache (shared across users, no user data) ----------------------------
@@ -512,10 +557,10 @@ def save_approved_list(db: Session, user_id: str, approved: ApprovedList, gap_st
 
 
 def _record_web_candidates(db: Session, approved: ApprovedList, previous: set[str]) -> None:
-    """Keep approved web resources as knowledge-base candidates. Re-approving a list counts a
+    """Keep approved web and YouTube resources as knowledge-base candidates. Re-approving a list counts a
     resource again only if the user's previous approval did not include it."""
     for item in approved.resources:
-        if item.source != "web":
+        if item.source == "knowledge_base":
             continue
         rid = item.resource.id
         candidate = db.get(WebResourceCandidate, rid)

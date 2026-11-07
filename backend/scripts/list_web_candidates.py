@@ -37,7 +37,9 @@ def main() -> int:
     rows = [r for r in rows if url_key(r.resource["url"]) not in curated]
     rows.sort(key=lambda r: (r.approvals, r.last_approved_at), reverse=True)
     if "--json" in sys.argv:
-        print(json.dumps([{**r.resource, "id": slug(r.resource["title"])} for r in rows], indent=2, ensure_ascii=False))
+        # quality (YouTube views and likes) is a snapshot from the source, not something to curate.
+        entries = [{**{k: v for k, v in r.resource.items() if k != "quality"}, "id": slug(r.resource["title"])} for r in rows]
+        print(json.dumps(entries, indent=2, ensure_ascii=False))
         return 0
     for r in rows:
         res = r.resource

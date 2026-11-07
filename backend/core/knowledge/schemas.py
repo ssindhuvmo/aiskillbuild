@@ -5,6 +5,17 @@ from typing import Literal
 from pydantic import BaseModel, Field, HttpUrl
 
 Level = Literal["beginner", "intermediate", "advanced"]
+# paper and tutorial are kept for existing entries and saved lists; the page groups them under "Article".
+Format = Literal["course", "video", "article", "paper", "tutorial", "repository", "book", "project"]
+Source = Literal["knowledge_base", "web", "youtube"]
+
+
+class Quality(BaseModel):
+    """Quality signals a source reports (YouTube: views and likes). Never written by an LLM."""
+
+    views: int | None = Field(default=None, ge=0)
+    likes: int | None = Field(default=None, ge=0)
+    trusted: bool = False  # from a channel in data/youtube_channels.json
 
 
 class Resource(BaseModel):
@@ -12,13 +23,14 @@ class Resource(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     provider: str = Field(min_length=1, max_length=120)
     url: HttpUrl
-    format: Literal["course", "paper", "project", "tutorial", "book"]
+    format: Format
     level: Level
     cost: Literal["free", "paid"]
     hours: int = Field(ge=1, le=300)
     skills: list[str] = Field(min_length=1)  # tags from the vocabulary
     domains: list[str] = []  # empty = general, useful in any domain
     description: str = Field(min_length=1, max_length=400)
+    quality: Quality | None = None  # None: the source reports no signals (curated and web resources)
 
 
 class KnowledgeBase(BaseModel):
@@ -33,6 +45,9 @@ class SearchProfile(BaseModel):
     ai_level: str  # intake/validation.py ai_level(): None, Beginner, Intermediate or Experienced
     domain: str
     hours_per_week: int
+    # Intake answers (intake/validation.py PREFERENCES); [] = not given, so preference fit is neutral.
+    preferences: list[str] = []
+    free_only: bool = False  # constraints.budget == "free_only": paid resources are never listed
 
 
 class Candidate(BaseModel):
@@ -42,4 +57,4 @@ class Candidate(BaseModel):
     resource: Resource
     match_score: float = Field(ge=0, le=1)
     matched_on: list[str] = []  # tags or terms that matched, shown to the user as "why"
-    source: Literal["knowledge_base", "web"] = "knowledge_base"
+    source: Source = "knowledge_base"

@@ -3,10 +3,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from core.agents.course_search.schemas import ResourceList
+from core.agents.course_search.schemas import Preferences, ResourceList, TypeGroup
 from core.agents.gap_analysis.schemas import BudgetSuggestion, Correction, GapAnalysis
 from core.agents.resume_parser.schemas import ResumeData
 from core.agents.scheduler.schemas import Roadmap
+from core.knowledge.schemas import Level, Resource
 
 
 class UserOut(BaseModel):
@@ -118,6 +119,17 @@ class AdjustIn(BaseModel):
     make_room: list[str] = Field(default=[], max_length=8)
 
 
+ProgressStatus = Literal["not_started", "started", "completed"]
+
+
+class ResourceProgressOut(BaseModel):
+    resource: Resource
+    saved: bool = False
+    status: ProgressStatus = "not_started"
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class ResourceState(BaseModel):
     status: Literal["none", "ready"]
     profile: ProfileOut
@@ -128,10 +140,29 @@ class ResourceState(BaseModel):
     approval_stale: bool = False  # the list changed since it was approved
     messages: list[ChatMessage] = []  # the refinement chat
     notice: str | None = None  # e.g. live web search was unavailable for this list
+    preferences: Preferences = Preferences()  # filters and favoured formats now applied to the list
+    free_only: bool = False  # the user's budget is "free only": paid resources are never listed
+    progress: list[ResourceProgressOut] = []  # Save / Start / Complete, including resources no longer listed
 
 
 class RemoveIn(BaseModel):
     resource_id: str
+
+
+class FilterIn(BaseModel):
+    """The filter chips. cost "any" and empty lists mean no filter."""
+
+    cost: Literal["any", "free", "paid"] = "any"
+    levels: list[Level] = Field(default=[], max_length=3)
+    types: list[TypeGroup] = Field(default=[], max_length=6)
+
+
+class ProgressIn(BaseModel):
+    """One Save / Start / Complete click. Fields left out stay as they are."""
+
+    resource_id: str = Field(min_length=1, max_length=80)
+    saved: bool | None = None
+    status: ProgressStatus | None = None
 
 
 class RoadmapState(BaseModel):

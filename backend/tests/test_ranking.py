@@ -2,7 +2,9 @@
 import pytest
 
 from core.agents.course_search import ranking, search
-from core.agents.course_search.ranking import diversify, domain_fit, level_fit, rank, score, time_fit
+from core.agents.course_search.ranking import (
+    diversify, domain_fit, level_fit, preference_fit, quality_fit, rank, score, time_fit,
+)
 from core.agents.gap_analysis.schemas import Gap
 from core.knowledge.schemas import Candidate, Resource, SearchProfile
 
@@ -53,7 +55,8 @@ def test_time_fit():
 def test_score_is_weighted_sum_with_breakdown():
     total, b = score(cand(res("x", level="intermediate", hours=40), match=0.8), gap(effort=20), BEGINNER)
     assert (b.relevance, b.level, b.domain, b.time) == (0.8, 0.5, 0.6, 0.5)
-    assert total == pytest.approx(0.45 * 0.8 + 0.2 * 0.5 + 0.2 * 0.6 + 0.15 * 0.5, abs=1e-3)
+    assert (b.preference, b.quality) == (0.5, 0.8)  # no preferences given: neutral; curated: CURATED_QUALITY
+    assert total == pytest.approx(0.40 * 0.8 + 0.15 * 0.5 + 0.15 * 0.6 + 0.10 * 0.5 + 0.15 * 0.5 + 0.05 * 0.8, abs=1e-3)
 
 
 def test_beginner_resource_outranks_advanced_for_new_user():

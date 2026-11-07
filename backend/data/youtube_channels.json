@@ -1,0 +1,18 @@
+{
+  "_comment": "Trusted YouTube channels: their videos skip the minimum-views check and get a quality boost. Ids are YouTube channel ids (UC...). Run scripts/check_youtube_channels.py after editing (uses 1 quota unit per channel).",
+  "channels": [
+    {"id": "UC8butISFwT-Wl7EV0hUK0BQ", "name": "freeCodeCamp.org"},
+    {"id": "UCYO_jab_esuFRV4b17AJtAw", "name": "3Blue1Brown"},
+    {"id": "UCtYLUTtgS3k1Fg4y5tAhLbw", "name": "StatQuest with Josh Starmer"},
+    {"id": "UCXUPKJO5MZQN11PqgIvyuvQ", "name": "Andrej Karpathy"},
+    {"id": "UCcIXc5mJsHVYTZR1maL5l9w", "name": "DeepLearningAI"},
+    {"id": "UCBa5G_ESCn8Yd4vw5U-gIcg", "name": "Stanford Online"},
+    {"id": "UCEBb1b_L6zDS3xTUrIALZOw", "name": "MIT OpenCourseWare"},
+    {"id": "UCfzlCWGWYyIQ0aLC5w48gBQ", "name": "sentdex"},
+    {"id": "UCCezIgC97PvUuR4_gbFUs5g", "name": "Corey Schafer"},
+    {"id": "UCHlNU7kIZhRgSbhHvFoy72w", "name": "Hugging Face"},
+    {"id": "UCJS9pqu9BzkAMNTmzNMNhvg", "name": "Google Cloud Tech"},
+    {"id": "UCZHmQk67mSJgfCCTn7xBfew", "name": "Yannic Kilcher"},
+    {"id": "UCbfYPyITQ-7l4upoX8nvctg", "name": "Two Minute Papers"}
+  ]
+}

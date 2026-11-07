@@ -221,6 +221,11 @@ input:disabled, select:disabled { opacity: .6; }
 .resource-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--text-small); }
 .resource p { font-size: 15px; }
 .resource .btn { align-self: flex-start; margin-left: -12px; }
+.resource .progress-buttons .btn { margin-left: 0; }
+.btn-secondary[aria-pressed="true"] { background: var(--tag-skill-bg); border-color: var(--color-primary); color: var(--tag-skill-text); }
+.filters { display: flex; flex-direction: column; gap: 10px; }
+.filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.filter-group .card-label { min-width: 48px; }
 
 /* --- Roadmap timeline ------------------------------------------------------------------ */
 .phase { display: flex; flex-direction: column; gap: 14px; }

@@ -5,7 +5,14 @@ from typing import Literal
 from pydantic import BaseModel, Field, HttpUrl
 
 from core.agents.gap_analysis.schemas import Gap
-from core.knowledge.schemas import Level, Resource
+from core.knowledge.schemas import Format, Level, Resource, Source
+
+# The page's "Type" filter groups formats; paper and tutorial show as Article.
+TypeGroup = Literal["course", "video", "article", "repository", "book", "project"]
+TYPE_OF: dict[str, str] = {
+    "course": "course", "video": "video", "article": "article", "paper": "article", "tutorial": "article",
+    "repository": "repository", "book": "book", "project": "project",
+}
 
 
 class ScoreBreakdown(BaseModel):
@@ -15,6 +22,9 @@ class ScoreBreakdown(BaseModel):
     level: float
     domain: float
     time: float
+    # Defaults keep lists saved before milestone 9 readable (0.5 = neutral).
+    preference: float = 0.5
+    quality: float = 0.5
 
 
 class RankedResource(BaseModel):
@@ -22,7 +32,7 @@ class RankedResource(BaseModel):
     score: float
     breakdown: ScoreBreakdown
     matched_on: list[str] = []
-    source: Literal["knowledge_base", "web"] = "knowledge_base"
+    source: Source = "knowledge_base"
     also_covers: list[str] = []  # other gaps (skill names) this resource also helps with
 
 
@@ -34,9 +44,6 @@ class GapResources(BaseModel):
 
 class ResourceList(BaseModel):
     gaps: list[GapResources]  # highest-priority gap first
-
-
-Format = Literal["course", "paper", "project", "tutorial", "book"]
 
 
 class WebFinding(BaseModel):
@@ -60,6 +67,8 @@ class Preferences(BaseModel):
 
     cost: Literal["any", "free", "paid"] = "any"
     formats: list[Format] = []  # formats to favour
+    levels: list[Level] = []  # filter; [] = every level
+    types: list[TypeGroup] = []  # filter on TYPE_OF groups; [] = every type
 
 
 class SearchRequest(BaseModel):
@@ -76,6 +85,8 @@ class RefinementAction(BaseModel):
     restore_ids: list[str] = []
     cost: Literal["any", "free", "paid"] | None = None  # None = leave as it is
     favour_formats: list[Format] | None = None  # None = leave as it is; [] = no preference
+    levels: list[Level] | None = None  # level filter; None = leave as it is; [] = every level
+    types: list[TypeGroup] | None = None  # type filter; None = leave as it is; [] = every type
     known_skills: list[str] = []  # gaps the user already knows: their resources are hidden
     restore_skills: list[str] = []
     add_more: list[SearchRequest] = []  # needs a new web search
@@ -87,7 +98,7 @@ class ApprovedResource(BaseModel):
     resource: Resource
     gaps: list[str]  # skill names it was chosen for: the gap it is listed under, then also_covers
     priority: Literal["high", "medium", "low"]  # of the gap it is listed under
-    source: Literal["knowledge_base", "web"] = "knowledge_base"
+    source: Source = "knowledge_base"
 
 
 class ApprovedList(BaseModel):

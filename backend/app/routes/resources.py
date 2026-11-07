@@ -9,7 +9,7 @@ from core.auth import current_user
 from core.db import SessionLocal, get_db
 from core.models import User
 from core.repository import NotReady, ValidationFailed
-from core.schemas import ChatIn, RemoveIn, ResourceState
+from core.schemas import ChatIn, FilterIn, ProgressIn, RemoveIn, ResourceState
 
 router = APIRouter(prefix="/api/resources")
 
@@ -56,6 +56,22 @@ def remove(body: RemoveIn, user: User = Depends(current_user), db: Session = Dep
         return agent.remove_for_user(db, user.user_id, body.resource_id)
     except NotReady as e:
         raise HTTPException(409, str(e))
+    except ValidationFailed as e:
+        raise HTTPException(422, {"errors": e.errors})
+
+
+@router.post("/filter", response_model=ResourceState)
+def filter_list(body: FilterIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        return agent.filter_for_user(db, user.user_id, body)
+    except NotReady as e:
+        raise HTTPException(409, str(e))
+
+
+@router.put("/progress", response_model=ResourceState)
+def progress(body: ProgressIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        return agent.progress_for_user(db, user.user_id, body)
     except ValidationFailed as e:
         raise HTTPException(422, {"errors": e.errors})
 

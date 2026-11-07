@@ -24,8 +24,9 @@ def row_counts(sub):
 
 def full_user(client, sub, fake_gaps, fake):  # noqa: F811
     """Signed in with data in every table: profile, chat, gaps, resources, approval and roadmap."""
-    approved_user(client, sub, fake_gaps)
+    ids = approved_user(client, sub, fake_gaps)
     generate(client)
+    assert client.put("/api/resources/progress", json={"resource_id": ids[0], "saved": True}).status_code == 200
     with dbmod.SessionLocal() as db:
         repository.append_message(db, sub, "user", "hello")
         # The resume row directly (tests/test_resume_api.py covers uploads and their files).

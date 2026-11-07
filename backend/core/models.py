@@ -131,6 +131,21 @@ class WebResourceCandidate(Base):
     last_approved_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class ResourceProgress(Base):
+    """Save / Start / Complete on one resource (self-reported, BR-21). Kept when the list is rebuilt, so it
+    carries the resource itself; a row with nothing set is deleted."""
+
+    __tablename__ = "resource_progress"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    resource_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    resource: Mapped[dict] = mapped_column(JSON)  # Resource as it was when last marked
+    saved: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(16), default="not_started")  # not_started | started | completed
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
 class Resume(Base):
     """The user's uploaded resume. `draft` is the parser's output awaiting review; only `data`
     (what the user reviewed and saved) is used by later steps."""

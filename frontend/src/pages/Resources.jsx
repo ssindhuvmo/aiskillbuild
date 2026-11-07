@@ -1,24 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { approveResources, getResources, removeResource, searchResources, streamChat } from "../api.js";
+import {
+  approveResources, filterResources, getResources, removeResource, searchResources, setResourceProgress, streamChat,
+} from "../api.js";
 import Button from "../components/Button.jsx";
 import Card from "../components/Card.jsx";
 import Chat from "../components/Chat.jsx";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import Notice from "../components/Notice.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import Progress from "../components/Progress.jsx";
-import ResourceCard from "../components/ResourceCard.jsx";
+import ResourceCard, { ProgressButtons } from "../components/ResourceCard.jsx";
+import ResourceFilters from "../components/ResourceFilters.jsx";
 
 const WEEKS = 26; // roadmap length; the backend enforces the real budget (scheduler/budget.py)
 const PRIORITY_LABEL = { high: "High priority", medium: "Medium priority", low: "Low priority" };
-const SUBTITLE = "Picked for your skill gaps, your level and your industry.";
+const SUBTITLE = "Picked for your gaps, your budget and how you like to learn.";
 
 const GREETING =
-  "Here is your list. Tell me what to change — for example “I prefer free ones”, “add more hands-on projects” or “I already know PyTorch”. To drop a single resource, use its Remove button. When you're happy with the list, approve it.";
+  "Here is your list. Tell me what to change — for example “I prefer free ones”, “add more hands-on projects” or “I already know PyTorch”. To drop a single resource, use its Remove button; the filters above the list narrow it down. When you're happy with the list, approve it.";
 
 const PROGRESS = [
   "Searching our curated library…",
   "Searching the web for each skill gap…",
+  "Searching YouTube for full courses…",
   "Checking that every link works…",
   "Ranking the results for you…",
 ];
@@ -35,6 +40,7 @@ export default function Resources() {
   const [error, setError] = useState(""); // from the buttons
   const [chatError, setChatError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [confirmRebuild, setConfirmRebuild] = useState(false);
   const autoRan = useRef(false);
   const navigate = useNavigate();
 
@@ -101,7 +107,9 @@ export default function Resources() {
   }
 
   const items = allItems(state);
-  const fromWeb = items.filter((i) => i.source === "web").length;
+  const count = (source) => items.filter((i) => i.source === source).length;
+  const progressById = Object.fromEntries(state.progress.map((p) => [p.resource.id, p]));
+  const offList = state.progress.filter((p) => !items.some((i) => i.resource.id === p.resource.id));
   const hours = items.reduce((n, i) => n + i.resource.hours, 0);
   const budget = profile.hours_per_week * WEEKS;
   const approved = state.approved_ids !== null && !state.approval_stale;
@@ -130,6 +138,29 @@ export default function Resources() {
       },
     });
     setSending(false);
+  }
+
+  // Filter chips change the list itself (no chat message, no AI call, no new search).
+  async function applyFilters(filters) {
+    setBusy(true);
+    setError("");
+    try {
+      load(await filterResources(filters));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Save / Start / Complete: recorded on its own, never changes the list.
+  async function markProgress(id, change) {
+    setError("");
+    try {
+      setState(await setResourceProgress(id, change));
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
   // The quick path for a simple removal: no chat message and no AI call.
@@ -168,12 +199,35 @@ export default function Resources() {
         actions={
           <>
             <span className="header-stat">{items.length} resources · {hours} h of your {budget} h</span>
+            <Button variant="secondary" onClick={() => setConfirmRebuild(true)}
+              disabled={busy || sending || !state.gaps_confirmed}>
+              Search again
+            </Button>
             <Button onClick={approve} disabled={busy || sending || state.stale || items.length === 0 || approved}>
               {approved ? "Approved ✓" : "Approve list"}
             </Button>
           </>
         }
       />
+
+      {confirmRebuild && (
+        <ConfirmDialog
+          title="Search again?"
+          confirmLabel="Search again"
+          busyLabel="Searching…"
+          onCancel={() => setConfirmRebuild(false)}
+          onConfirm={() => {
+            setConfirmRebuild(false);
+            run();
+          }}
+        >
+          <p>
+            This builds a new list from the curated library, the web and YouTube. It replaces the current list, your
+            filters and the refinement chat; if you approved the list, approve the new one to update your roadmap.
+            Saved, started and completed resources are kept.
+          </p>
+        </ConfirmDialog>
+      )}
 
       {state.stale && (
         <Notice>
@@ -197,10 +251,19 @@ export default function Resources() {
         <p className="muted">This list changed since you last approved it. Approve it again to update your roadmap.</p>
       )}
 
+      <Card title="Filters">
+        <ResourceFilters
+          preferences={state.preferences}
+          freeOnly={state.free_only}
+          disabled={busy || sending || state.stale}
+          onChange={applyFilters}
+        />
+      </Card>
+
       <p className="muted">
-        {items.length - fromWeb} from our curated library, {fromWeb} found on the web, ranked for each skill gap by
-        how well they match the skill, your AI level ({profile.ai_level}), your industry ({profile.domain})
-        and the time they take. Your roadmap has {budget} hours ({profile.hours_per_week} hrs/week × {WEEKS} weeks).
+        {count("knowledge_base")} from our curated library, {count("web")} found on the web, {count("youtube")} from
+        YouTube, ranked for each skill gap by how well they match the skill, your AI level ({profile.ai_level}), your
+        industry ({profile.domain}), how you like to learn, the time they take and, for YouTube, views and likes. Your roadmap has {budget} hours ({profile.hours_per_week} hrs/week × {WEEKS} weeks).
         {hours > budget &&
           " This list is more than fits: the roadmap will schedule the most important parts and list what it left out, or you can ask to remove a few resources."}
       </p>
@@ -223,6 +286,8 @@ export default function Resources() {
                     key={item.resource.id}
                     item={item}
                     profile={profile}
+                    progress={progressById[item.resource.id]}
+                    onProgress={(change) => markProgress(item.resource.id, change)}
                     onRemove={remove}
                     disabled={busy || sending || state.stale}
                   />
@@ -230,6 +295,25 @@ export default function Resources() {
               )}
             </section>
           ))}
+
+          {offList.length > 0 && (
+            <Card title="Saved and in progress, not on this list">
+              <ul className="rows">
+                {offList.map((p) => (
+                  <li key={p.resource.id}>
+                    <a href={p.resource.url} target="_blank" rel="noopener noreferrer">{p.resource.title} ↗</a>
+                    <span className="muted">{p.resource.provider} · {p.resource.hours} h</span>
+                    <ProgressButtons
+                      title={p.resource.title}
+                      saved={p.saved}
+                      status={p.status}
+                      onProgress={(change) => markProgress(p.resource.id, change)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
 
         <Card as="aside" title="Refine your list" aria-label="Refine your list" className="split-side sticky chat-compact">

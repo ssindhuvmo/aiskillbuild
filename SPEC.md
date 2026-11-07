@@ -184,6 +184,20 @@ preferences, budget (paid items are dropped when the budget is "free only"), and
 quality signals where the source provides them (rating, views or enrolment).
 Every link is real and verified; the LLM never writes URLs.
 
+How it is built (milestone 9):
+- YouTube: one search per gap (videos and playlists, "<skill> full course"), then
+  durations, views and likes from the API. Vetting in Python: at least 30 minutes,
+  matches the gap's tags, and either a trusted channel or at least 20,000 views.
+  Results are cached for 14 days and shared across users. Skipped when the user's
+  learning preferences leave out video; without an API key the page says so.
+- Ranking weights: relevance 0.40, level 0.15, domain 0.15, time 0.10, learning
+  preference 0.15, quality 0.05. Quality is the source's own signal (views and likes
+  for YouTube; curated entries count as reviewed); "certifications" cannot be matched
+  yet because no source reports certificates.
+- The filters change the list itself (no AI call, no new search), so the approved
+  list is exactly what is shown. Save / Start / Complete are recorded per user and
+  resource and kept when the list is rebuilt; they do not change the list.
+
 Page:
 - Filters: Free / Paid; Beginner / Intermediate / Advanced; type (Course, Video,
   Article, GitHub Repository, Book, Project).
@@ -330,7 +344,7 @@ LangGraph remains limited to flows with a real pause-for-user loop.
    BR-12). New profile fields with Alembic migrations, resume parser, gap analysis
    using resume data and the capability assessment, skill gap chart. — built, in testing
 9. **Resource sources and preferences** (BR-17, BR-20, BR-21). YouTube source,
-   preference- and budget-aware ranking, filters, Save / Start / Complete.
+   preference- and budget-aware ranking, filters, Save / Start / Complete. — built, in testing
 10. **Roadmap tracking and Transition Report** (BR-18, BR-19, BRD 8.4). Status,
     due dates, checkboxes, no padding, immediate next steps, the report, PDF export.
 11. **Dashboard and Progress Review** (BR-22 to BR-25). Metrics and charts,

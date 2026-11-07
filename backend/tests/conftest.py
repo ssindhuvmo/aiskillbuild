@@ -21,7 +21,7 @@ dbmod.SessionLocal.configure(bind=dbmod.engine)
 
 from app.main import app  # noqa: E402
 from core import auth  # noqa: E402
-from core.agents.course_search import verify, web  # noqa: E402
+from core.agents.course_search import verify, web, youtube  # noqa: E402
 from core.agents.resume_parser import storage  # noqa: E402
 from core.models import WebResourceCandidate, WebSearchCache  # noqa: E402
 
@@ -36,6 +36,21 @@ class FakeSearcher:
 
     def search(self, gap, profile, hint=None):
         self.calls.append((gap.skill, hint))
+        found = self.results.get(gap.skill, [])
+        if isinstance(found, Exception):
+            raise found
+        return list(found)
+
+
+class FakeYouTube:
+    """Stands in for the YouTube Data API: scripted candidates per skill (none by default)."""
+
+    def __init__(self):
+        self.results = {}
+        self.calls = []
+
+    def search(self, gap, profile):
+        self.calls.append(gap.skill)
         found = self.results.get(gap.skill, [])
         if isinstance(found, Exception):
             raise found
@@ -63,11 +78,14 @@ def _fake_google(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def searcher(monkeypatch):
-    """No network: web search finds nothing unless a test fills `searcher.results`, and every
-    link checks out unless a test sets `searcher.link_status[url]`."""
+    """No network: web search finds nothing unless a test fills `searcher.results`, YouTube nothing unless
+    a test fills `searcher.youtube.results`, and every link checks out unless a test sets
+    `searcher.link_status[url]`."""
     fake = FakeSearcher()
     fake.link_status = {}
+    fake.youtube = FakeYouTube()
     monkeypatch.setattr(web, "get_searcher", lambda: fake)
+    monkeypatch.setattr(youtube, "get_youtube", lambda: fake.youtube)
     monkeypatch.setattr(verify, "get_checker", lambda: lambda url: (fake.link_status.get(url, "ok"), "fake"))
     return fake
 

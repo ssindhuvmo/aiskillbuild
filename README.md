@@ -3,7 +3,7 @@
 Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full
 specification (v2).
 
-**Current status: Milestone 8 of 14** (see Milestones in `SPEC.md`):
+**Current status: Milestone 9 of 14** (see Milestones in `SPEC.md`):
 1. React + FastAPI skeleton and conversational intake — done
 2. Google sign-in with per-user sessions — done
 3. Skill-gap analysis with user corrections — done
@@ -13,9 +13,11 @@ specification (v2).
 7. Design system and app shell (dark theme, sidebar, Home page, restyled pages) — done
 8. Expanded intake, resume upload and Career Profile (capability assessment, preferences, constraints,
    evidence-based skill analysis with a gap chart, Alembic migrations) — built, in testing
+9. Resource sources and preferences (YouTube source, preference- and budget-aware ranking, filters,
+   Save / Start / Complete) — built, in testing
 
-The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (resource filters,
-Save / Start / Complete, task checkboxes and dates, PDF export, View Demo) are not built yet. Dashboard,
+The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (task checkboxes and
+dates, PDF export, View Demo) are not built yet. Dashboard,
 Progress Review, Job Match and Resume Optimizer are placeholders in the sidebar.
 
 ## Google sign-in setup (once)
@@ -37,7 +39,7 @@ python -m venv .venv                 # create the virtual environment (once)
 .\.venv\Scripts\Activate.ps1         # activate  (macOS/Linux: source .venv/bin/activate)
 pip install -r requirements.txt
 copy .env.example .env               # macOS/Linux: cp .env.example .env
-# edit .env: set ANTHROPIC_API_KEY, GOOGLE_CLIENT_ID and SESSION_SECRET
+# edit .env: set ANTHROPIC_API_KEY, GOOGLE_CLIENT_ID and SESSION_SECRET (YOUTUBE_API_KEY is optional)
 python -c "import secrets; print(secrets.token_urlsafe(48))"   # prints a SESSION_SECRET value
 uvicorn app.main:app --reload --port 8000
 ```
@@ -108,6 +110,18 @@ most approved first (add `--json` for entries ready to paste into `resources`, t
 python scripts/list_web_candidates.py     # from backend/, venv active
 ```
 
+**YouTube (optional).** Resources include full courses and playlists from YouTube when `YOUTUBE_API_KEY` is set
+in `backend/.env`: in Google Cloud Console enable **YouTube Data API v3** and create an API key (restrict it to
+that API). Without a key the list is built without YouTube and the Resources page says so. Each skill gap costs
+about 100–110 units of the free 10,000-unit daily quota, and results are shared across users for 14 days, so a
+rebuilt list usually costs nothing. The log line `YouTube search run: N of M gaps searched, C from cache,
+U quota units` shows what a run used. Trusted channels (they skip the minimum-views check and rank higher)
+are in `backend/data/youtube_channels.json`; after editing it, check the ids against the API (1 unit):
+
+```powershell
+python scripts/check_youtube_channels.py     # from backend/, venv active; uses the real YouTube API
+```
+
 ## Frontend
 
 ```powershell
@@ -145,8 +159,15 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
    listed under **Later / optional**, where **Add to my plan** swaps one in on the next update.
 6. Click **Confirm skills**. You go to **Resources**, where the list is built right away (about 30–90 seconds:
    curated library, live web search, link checks, ranking).
-7. Review the resources for each gap, highest priority first: up to four each, mixing courses, papers and
-   projects and free and paid, with a "Why this" line. Results found on the web carry a **web** tag.
+7. Review the resources for each gap, highest priority first: up to four each, mixing courses, videos,
+   articles and projects and free and paid, with a "Why this" line. They come from the curated library, the
+   web (**Web** tag) and YouTube (**YouTube** tag, with views and likes), and rank higher when they match how
+   you like to learn (intake preferences). With a "free only" budget, paid resources never appear. Use the
+   **Filters** (Cost, Level, Type) to narrow the list: each click rebuilds it at once (no AI call), and what
+   you see is what gets approved. **Save**, **Start** and **Complete** on a card record your progress; they
+   don't change the list, and saved or started resources that leave the list are shown below it.
+   **Search again** (top right) builds a fresh list, e.g. after adding a YouTube key; it replaces the list,
+   filters and chat, and keeps your saved and started resources.
 8. Click **Remove** on a card to drop a single resource at once (no AI call). For anything else use the
    **Refine your list** chat: "I prefer free ones", "add more hands-on projects", "I already know PyTorch",
    "put the Coursera one back". The list updates and the reply explains what changed. Sign out

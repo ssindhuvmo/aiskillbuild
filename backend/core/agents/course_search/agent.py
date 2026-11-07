@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from core import repository
 from core.agents.course_search.graph import get_graph
+from core.agents.course_search.schemas import Preferences
 from core.llm import friendly_error
 from core.repository import NotReady, ValidationFailed
-from core.schemas import ChatMessage, ResourceState
+from core.schemas import ChatMessage, FilterIn, ProgressIn, ResourceState
 
 log = logging.getLogger(__name__)
 
@@ -50,9 +51,11 @@ def state_for_user(db: Session, user_id: str) -> ResourceState:
     values = _paused(user_id)
     if values is None:
         return state.model_copy(update={"stale": True})
-    return state.model_copy(
-        update={"messages": [ChatMessage(**m) for m in values.get("messages", [])], "notice": values.get("notice")}
-    )
+    return state.model_copy(update={
+        "messages": [ChatMessage(**m) for m in values.get("messages", [])],
+        "notice": values.get("notice"),
+        "preferences": Preferences(**values.get("preferences", {})),
+    })
 
 
 def check_ready(db: Session, user_id: str) -> ResourceState:
@@ -121,6 +124,30 @@ def remove_for_user(db: Session, user_id: str, resource_id: str) -> ResourceStat
     with _lock(user_id):
         get_graph().invoke(Command(resume={"type": "remove", "resource_id": resource_id}), _config(user_id))
     db.expire_all()
+    return state_for_user(db, user_id)
+
+
+def filter_for_user(db: Session, user_id: str, filters: FilterIn) -> ResourceState:
+    """The filter chips: resume the graph with the filters directly (no model call, no web search). The
+    list is rebuilt from what is already known, so what is shown is what gets approved."""
+    check_ready(db, user_id)
+    request = {"type": "filter", **filters.model_dump()}
+    with _lock(user_id):
+        get_graph().invoke(Command(resume=request), _config(user_id))
+    db.expire_all()
+    return state_for_user(db, user_id)
+
+
+def progress_for_user(db: Session, user_id: str, change: ProgressIn) -> ResourceState:
+    """Save / Start / Complete on a resource that is on the user's list, or that they marked before. Not a
+    list change, so the graph is not involved."""
+    state = state_for_user(db, user_id)
+    listed = {r.resource.id: r.resource for g in (state.resources.gaps if state.resources else []) for r in g.resources}
+    known = {p.resource.id: p.resource for p in state.progress}
+    resource = listed.get(change.resource_id) or known.get(change.resource_id)
+    if resource is None:
+        raise ValidationFailed({"resource_id": "That resource is not on your list. Reload the page."})
+    repository.set_progress(db, user_id, resource, change.saved, change.status)
     return state_for_user(db, user_id)
 
 

@@ -20,6 +20,8 @@ FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 CHECKPOINT_DB = os.getenv("CHECKPOINT_DB", str(BACKEND_DIR / "graph_checkpoints.db"))
 # Uploaded resumes, one folder per user (gitignored; never served back to the browser).
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(BACKEND_DIR / "uploads"))
+# YouTube Data API v3 key for the YouTube resource source; empty = YouTube is skipped.
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")

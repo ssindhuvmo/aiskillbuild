@@ -6,7 +6,8 @@
                        +---------- new search needed ---------- apply <-----------------+
                                                                                         +-> approve -> await_user
 
-The first run builds the list and pauses. Each chat message resumes the graph: `interpret` turns
+The first pass of web_search also searches YouTube (youtube.py) for every gap, unless the user's
+learning preferences leave out video. The first run builds the list and pauses. Each chat message resumes the graph: `interpret` turns
 the message into operations (RefinementAction), `apply` updates the state in plain Python, the
 list is rebuilt (searching the web again only when needed) and explained, and the graph pauses
 again. Approval saves the approved list for the scheduler and pauses too, so the user can keep
@@ -30,9 +31,9 @@ from langgraph.types import interrupt
 from pydantic import ValidationError
 
 from core import repository
-from core.agents.course_search import search, verify, web
+from core.agents.course_search import search, verify, web, youtube
 from core.agents.course_search.ranking import rank
-from core.agents.course_search.schemas import Preferences, RankedResource, RefinementAction, ResourceList
+from core.agents.course_search.schemas import TYPE_OF, Preferences, RankedResource, RefinementAction, ResourceList
 from core.agents.gap_analysis.schemas import Gap
 from core.config import CHECKPOINT_DB
 from core.db import SessionLocal
@@ -54,7 +55,10 @@ RECENT_MESSAGES = 6  # chat history given to the interpreter
 ACTION_FORMAT = {"type": "json_schema", "schema": transform_schema(RefinementAction)}
 
 WEB_UNAVAILABLE = "Live web search didn't work for every skill, so parts of this list come from the curated library only. "
+YOUTUBE_UNAVAILABLE = "YouTube search didn't work, so this list has no YouTube results: "
+YOUTUBE_OFF = "YouTube results are off because no YouTube API key is set (YOUTUBE_API_KEY in backend/.env)."
 SKIPPED = "Skipped: you said you already know this."
+FILTERED = "Nothing on this list matches your filters for this skill. Change the filters, or ask in the chat to search for more."
 NOT_UNDERSTOOD = "I couldn't work out how to apply that. Please try rephrasing it."
 
 
@@ -66,7 +70,7 @@ class SearchState(TypedDict, total=False):
     gaps: list[dict]  # Gap, in gap-analysis order
     profile: dict  # SearchProfile
     kb: list[list[dict]]  # Candidate per gap, from the knowledge base
-    web: list[list[dict]]  # Candidate per gap, from every web search so far
+    web: list[list[dict]]  # Candidate per gap, from every web and YouTube search so far
     candidates: list[list[dict]]  # merged, de-duplicated and URL-verified
     checked: dict[str, str]  # url key -> "ok" | "blocked" | "fail"
     ranked: list[list[dict]]  # RankedResource per gap, after the user's preferences
@@ -108,20 +112,28 @@ def _listed(resource_list: dict | None) -> dict[str, dict]:
 # --- Pure helpers -------------------------------------------------------------------
 
 
+def keeps(r: RankedResource, prefs: Preferences, free_only: bool = False) -> bool:
+    """The filters: cost (a "free only" budget always wins), level and type."""
+    cost = "free" if free_only else prefs.cost
+    return (
+        (cost == "any" or r.resource.cost == cost)
+        and (not prefs.levels or r.resource.level in prefs.levels)
+        and (not prefs.types or TYPE_OF[r.resource.format] in prefs.types)
+    )
+
+
 def apply_preferences(
-    ranked: list[list[RankedResource]], gaps: list[Gap], removed: set[str], skipped: set[str], prefs: Preferences
+    ranked: list[list[RankedResource]], gaps: list[Gap], removed: set[str], skipped: set[str], prefs: Preferences,
+    free_only: bool = False,
 ) -> list[list[RankedResource]]:
-    """What the user asked for in the chat, applied on top of the ranking: removed resources and
-    skipped gaps are dropped, a cost preference is a filter and favoured formats get a boost."""
+    """What the user asked for (chat or filter chips), applied on top of the ranking: removed resources
+    and skipped gaps are dropped, cost, level and type are filters and favoured formats get a boost."""
     result = []
     for gap, items in zip(gaps, ranked):
         if gap.skill in skipped:
             result.append([])
             continue
-        kept = [
-            r for r in items
-            if r.resource.id not in removed and (prefs.cost == "any" or r.resource.cost == prefs.cost)
-        ]
+        kept = [r for r in items if r.resource.id not in removed and keeps(r, prefs, free_only)]
         kept = [
             r.model_copy(update={"score": round(min(r.score + FAVOUR_BOOST, 1.0), 3)}) if r.resource.format in prefs.formats else r
             for r in kept
@@ -191,6 +203,10 @@ def _hint(request: dict, prefs: Preferences, titles: list[str]) -> str | None:
     formats = [request["format"]] if request.get("format") else prefs.formats
     if formats:
         parts.append(f"Look for these formats: {', '.join(formats)}.")
+    if prefs.levels:
+        parts.append(f"Levels: {', '.join(prefs.levels)} only.")
+    if prefs.types and not request.get("format"):
+        parts.append(f"Kinds of resource: {', '.join(prefs.types)} only.")
     if request.get("hint"):
         parts.append(f"The user asked for: {request['hint']}")
     if titles:
@@ -220,6 +236,44 @@ def _first_pass(state: SearchState, found: list[list[dict]]) -> tuple[list[dict]
     return requests, cached
 
 
+def _youtube_first_pass(state: SearchState, found: list[list[dict]]) -> str | None:
+    """Add YouTube candidates for every gap to `found` (cached results first, shared across users).
+    Skipped when the user's learning preferences leave out video. Returns a notice, or None."""
+    gaps, profile = _gaps(state), _profile(state)
+    if profile.preferences and "video" not in profile.preferences:
+        return None
+    source = youtube.get_youtube()
+    if source is None:
+        log.info("YouTube search skipped: YOUTUBE_API_KEY is not set")
+        return YOUTUBE_OFF
+    todo, cached = [], []
+    with SessionLocal() as db:
+        for i, gap in enumerate(gaps):
+            hit = repository.get_cached_search(db, youtube.cache_key(gap, profile), timedelta(days=youtube.CACHE_DAYS))
+            if hit is None:
+                todo.append(i)
+            else:
+                found[i] += _dump(hit)
+                cached.append(gap.skill)
+    notice = None
+    with ThreadPoolExecutor(max_workers=SEARCH_WORKERS) as pool:
+        for i, future in [(i, pool.submit(source.search, gaps[i], profile)) for i in todo]:
+            try:
+                candidates = future.result()
+            except Exception as exc:  # the list still works without YouTube (and nothing is cached)
+                log.warning("YouTube search failed: %s", exc)
+                notice = YOUTUBE_UNAVAILABLE + (str(exc) if isinstance(exc, youtube.YouTubeError) else friendly_error(exc))
+                continue
+            found[i] += _dump(candidates)
+            with SessionLocal() as db:
+                repository.save_cached_search(db, youtube.cache_key(gaps[i], profile), candidates)
+    log.info(
+        "YouTube search run: %d of %d gaps searched, %d from cache, %s quota units",
+        len(todo), len(gaps), len(cached), getattr(source, "units", "n/a"),
+    )
+    return notice
+
+
 def web_search(state: SearchState) -> dict:
     """Search the web: on the first pass for the gaps the knowledge base covers thinly (see
     _first_pass), later only for the gaps `apply` asked for (never cached: those carry the user's
@@ -228,8 +282,10 @@ def web_search(state: SearchState) -> dict:
     index = {g.skill: i for i, g in enumerate(gaps)}
     found = [list(cs) for cs in state.get("web") or [[] for _ in gaps]]
     requests, cached = state.get("search_requests"), []
+    youtube_notice = None
     if requests is None:
         requests, cached = _first_pass(state, found)
+        youtube_notice = _youtube_first_pass(state, found)
     prefs = Preferences(**state.get("preferences", {}))
     known = state.get("candidates") or [[] for _ in gaps]
     searcher = web.get_searcher()
@@ -260,7 +316,7 @@ def web_search(state: SearchState) -> dict:
         len(cached), ", ".join(cached) or "none", getattr(searcher, "searches", "n/a"),
         getattr(searcher, "input_tokens", "n/a"), getattr(searcher, "output_tokens", "n/a"),
     )
-    return {"web": found, "search_requests": [], "notice": notice}
+    return {"web": found, "search_requests": [], "notice": " ".join(n for n in (notice, youtube_notice) if n) or None}
 
 
 def merge_dedupe(state: SearchState) -> dict:
@@ -297,7 +353,7 @@ def verify_urls(state: SearchState) -> dict:
 def _ranked(state: SearchState, removed: set[str], skipped: set[str], prefs: Preferences) -> list[list[RankedResource]]:
     gaps, profile = _gaps(state), _profile(state)
     ranked = [rank([Candidate(**c) for c in cs], gap, profile) for cs, gap in zip(state["candidates"], gaps)]
-    return apply_preferences(ranked, gaps, removed, skipped, prefs)
+    return apply_preferences(ranked, gaps, removed, skipped, prefs, profile.free_only)
 
 
 def rank_node(state: SearchState) -> dict:
@@ -358,9 +414,13 @@ def present(state: SearchState, config: RunnableConfig) -> dict:
     ranked = [[RankedResource(**r) for r in rs] for rs in state["ranked"]]
     result = search.present(gaps, ranked, state.get("per_gap", search.PER_GAP))
     skipped = set(state.get("skipped_gaps", []))
+    prefs = Preferences(**state.get("preferences", {}))
+    filtered = prefs.cost != "any" or prefs.levels or prefs.types
     for g in result.gaps:
         if g.gap.skill in skipped:
             g.note = SKIPPED
+        elif filtered and not g.resources:
+            g.note = FILTERED
     user_id = config["configurable"]["thread_id"]
     with SessionLocal() as db:
         repository.save_resource_list(db, user_id, result, repository.get_gap_state(db, user_id))
@@ -434,11 +494,14 @@ def interpret(state: SearchState) -> dict:
     """Turn what the user sent into an action. Never raises: after a failure the graph pauses
     again unchanged, so the user can simply retry."""
     request = state["request"]
-    # The Approve and Remove buttons send their operation directly: no model call needed.
+    # The Approve, Remove and filter buttons send their operation directly: no model call needed.
     if request["type"] == "approve":
         return {"action": RefinementAction(approve=True).model_dump()}
     if request["type"] == "remove":
         return {"action": RefinementAction(remove_ids=[request["resource_id"]]).model_dump()}
+    if request["type"] == "filter":
+        action = RefinementAction(cost=request["cost"], levels=request["levels"], types=request["types"])
+        return {"action": action.model_dump()}
     writer = get_stream_writer()
     text = request["text"]
     try:
@@ -466,20 +529,24 @@ def after_interpret(state: SearchState) -> str:
 
 
 def apply(state: SearchState) -> dict:
-    """Apply the operations to the state. Only "add more" and a cost filter that empties a gap
-    need a new web search; everything else just re-ranks what is already known."""
+    """Apply the operations to the state. Only "add more" and, for a chat message, a filter that empties
+    a gap need a new web search; everything else (and every button) just re-ranks what is already known."""
     action = RefinementAction(**state["action"])
     old = Preferences(**state.get("preferences", {}))
     prefs = Preferences(
         cost=action.cost or old.cost,
         formats=old.formats if action.favour_formats is None else action.favour_formats,
+        levels=old.levels if action.levels is None else action.levels,
+        types=old.types if action.types is None else action.types,
     )
     removed = [i for i in [*state.get("removed_ids", []), *action.remove_ids] if i not in action.restore_ids]
     skipped = [s for s in [*state.get("skipped_gaps", []), *action.known_skills] if s not in action.restore_skills]
     removed, skipped = list(dict.fromkeys(removed)), list(dict.fromkeys(skipped))
 
     requests = [r.model_dump() for r in action.add_more[:MAX_SEARCHES_PER_TURN]]
-    if prefs.cost != old.cost and prefs.cost != "any":
+    narrowed = (prefs.cost != old.cost and prefs.cost != "any") or (prefs.levels and prefs.levels != old.levels) or (
+        prefs.types and prefs.types != old.types)
+    if narrowed and state["request"]["type"] == "message":
         asked = {r["skill"] for r in requests}
         had = {g["gap"]["skill"] for g in state["resource_list"]["gaps"] if g["resources"]}
         ranked = _ranked(state, set(removed), set(skipped), prefs)

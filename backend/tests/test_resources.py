@@ -50,7 +50,7 @@ def test_search_saves_ranked_list_per_gap(anon, fake_gaps):
     assert pci["resources"][0]["resource"]["id"] == "pci-dss-library"  # the FinTech compliance resource
     first = ml["resources"][0]
     assert first["resource"]["url"].startswith("https://")
-    assert set(first["breakdown"]) == {"relevance", "level", "domain", "time"}
+    assert set(first["breakdown"]) == {"relevance", "level", "domain", "time", "preference", "quality"}
 
     client.post("/api/auth/logout")
     login(client, "r2")

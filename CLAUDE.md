@@ -15,14 +15,16 @@ milestones; `README.md` has setup steps. Build only the current milestone.
   - `agents/<name>/` — one module per agent with its own `prompt.md`: `intake/` (streaming chat with
     `record_profile` and `suggest_roles` tools; `validation.py` defines the steps, levels and options),
     `resume_parser/` (file checks + text extraction, one structured-output call, plain-Python rules, file
-    storage), `gap_analysis/` (one structured-output call), `course_search/` (the LangGraph graph: web search,
-    refinement chat, approval) and `scheduler/` (Python placement and hour budget; one structured-output
+    storage), `gap_analysis/` (one structured-output call), `course_search/` (the LangGraph graph: web and
+    YouTube search, refinement chat, filters, approval) and `scheduler/` (Python placement and hour budget; one structured-output
     call per phase, for the text only).
     `llm.py` — Anthropic client and `friendly_error`.
   - `knowledge/` — the knowledge base (`store.py`) and the retrieval layer (`retriever.py`).
 - `backend/config/domains.json` — supported domains (edit here, not in code).
 - `backend/data/knowledge_base.json` — curated resources + skill-tag vocabulary (edit here, not in code).
+- `backend/data/youtube_channels.json` — trusted YouTube channels by channel id (edit here, not in code).
 - `backend/scripts/check_kb_links.py` — live check of every knowledge-base URL (network; not in pytest).
+  `scripts/check_youtube_channels.py` checks the trusted channel ids against the real YouTube API.
 - `backend/alembic.ini`, `backend/migrations/` — Alembic (`versions/0001_baseline` = the milestone-7 schema).
 - `backend/uploads/<user id>/` — uploaded resumes (`UPLOAD_DIR`; gitignored, never served).
 - `frontend/src/` — `App.jsx` (auth gate, shell, routes), `api.js` (all fetch calls), `pages/`, `components/`,
@@ -32,7 +34,7 @@ milestones; `README.md` has setup steps. Build only the current milestone.
 ## Milestones
 Numbered in `SPEC.md`: 1 intake, 2 Google sign-in, 3 skill gaps, 4 knowledge base + ranking, 5 resource approval +
 scheduler + roadmap, 6 live web search + refinement (LangGraph), 7 design system and app shell, 8 expanded
-intake + resume + Career Profile; 9–14 are listed there. Build one at a time and stop for testing after each.
+intake + resume + Career Profile, 9 resource sources and preferences; 10–14 are listed there. Build one at a time and stop for testing after each.
 
 ## Orchestration decision: LangGraph for course search only
 - The course search agent and conversational refinement (flow steps 4–5) are one LangGraph graph in
@@ -90,8 +92,8 @@ intake + resume + Career Profile; 9–14 are listed there. Build one at a time a
   those tags a resource covers (`broad_tags` count half; the denominator is at least 1; +0.2 for the user's domain
   on domain-specific gaps). `get_retriever()` is the only swap point for a future vector retriever (local
   embeddings + sqlite-vec); ranking, API and UI must not change for that.
-- `course_search/ranking.py` (pure): score = 0.45 relevance + 0.20 level fit + 0.20 domain fit + 0.15 time fit
-  (`WEIGHTS`); `diversify` penalizes repeated formats/costs to mix courses/papers/projects and free/paid.
+- `course_search/ranking.py` (pure): score = weighted relevance, level fit, domain fit and time fit, plus
+  preference and quality fit since milestone 9 (`WEIGHTS`, see Milestone 9); `diversify` penalizes repeated formats/costs to mix courses/papers/projects and free/paid.
 - `course_search/search.py`: `retrieve` → `merge_dedupe` (by URL) → `rank` → `present` (gaps by priority, ≤ 4
   each, only resources passing the relevance gate `passes()`, a resource shown once under its best gap with
   `also_covers`). The gate: relevance ≥ `MIN_RELEVANCE` (0.7) and at least one of the gap's specific (non-broad)
@@ -272,6 +274,41 @@ intake + resume + Career Profile; 9–14 are listed there. Build one at a time a
   (`BudgetSuggestion`); resending with `make_room` = its `move` does the swap. Limits that can't be met (an empty
   plan, a full later list) → 422; no current analysis → 409.
 
+## Resource sources and preferences (Milestone 9)
+- Formats (`knowledge/schemas.py` `Format`): course, video, article, paper, tutorial, repository, book, project.
+  The page's Type filter groups them with `course_search/schemas.py` `TYPE_OF` (paper and tutorial → article);
+  `ResourceFilters.jsx` and `ResourceCard.jsx` mirror the groups and labels. `Source` = knowledge_base | web |
+  youtube. `Resource.quality` (`Quality`: views, likes, trusted) is set only from a source's own data.
+- `SearchProfile` adds `preferences` (intake `learning_preferences`, [] when not asked) and `free_only`
+  (`constraints.budget == "free_only"`), so changing either makes the list stale.
+- Ranking (`ranking.py`): `WEIGHTS` relevance 0.40, level 0.15, domain 0.15, time 0.10, preference 0.15,
+  quality 0.05. `preference_fit` uses `PREFERENCE_MATCH` (intake key → format/cost test; 1, else
+  `NO_PREFERENCE_MATCH`; `NEUTRAL` when nothing usable). `quality_fit`: YouTube views (log scale) and like
+  rate, trusted channels at least `TRUSTED_QUALITY`; curated `CURATED_QUALITY`; web `NEUTRAL`.
+  `ScoreBreakdown.preference` / `quality` default to 0.5 so older saved lists still load.
+- YouTube (`course_search/youtube.py`): `YouTubeSource` protocol, `get_youtube()` is the swap point (None without
+  `YOUTUBE_API_KEY`). `YouTubeDataAPI` (httpx, truststore via config): one `search` (100 quota units, videos +
+  playlists for "<skill> full course") then `videos` / `playlistItems` (1 unit each); `units` counts quota.
+  `to_candidates` (pure) vets: ≥ `MIN_MINUTES`, tag match with the gap (weighted like `TagRetriever`, capped
+  at `MAX_RELEVANCE`; title match for tagless gaps), trusted channel or ≥ `MIN_VIEWS`; level from title
+  keywords; hours from the API durations. Errors raise `YouTubeError`, whose message never contains the key.
+- The graph's first pass (`web_search` → `_youtube_first_pass`) searches YouTube for every gap unless the
+  user's preferences leave out video, reusing `web_search_cache` (key prefixed `youtube: `, `CACHE_DAYS`).
+  A failure or a missing key never fails the list: `YOUTUBE_UNAVAILABLE` / `YOUTUBE_OFF` notice. Later passes
+  search only the web. YouTube links are built from API ids and not re-checked. Approved YouTube resources
+  are knowledge-base candidates too (`_record_web_candidates`).
+- Filters: `Preferences.levels` / `types` (and `cost`) are filters in `apply_preferences` via `keeps()`; a
+  "free only" budget always drops paid. The chips resume the graph with `{"type": "filter", cost, levels,
+  types}` (no LLM, no search, no explanation); the chat can set them too (`RefinementAction.levels` /
+  `types`), and only a chat change that empties a gap triggers a web search. A gap emptied by filters gets the
+  `FILTERED` note. `ResourceState` carries `preferences` and `free_only`.
+- Save / Start / Complete (`resource_progress` table, one row per user and resource, with the `Resource` so it
+  survives rebuilds; a row with nothing set is deleted): `repository.set_progress` / `get_progress`,
+  `agent.progress_for_user` (only resources on the list or already in the user's progress; else 422).
+  `ResourceState.progress` lists every row. Progress never changes the list or the approval.
+- Endpoints: `POST /api/resources/filter` (`FilterIn`; 409 without a current list),
+  `PUT /api/resources/progress` (`ProgressIn`: `resource_id` plus `saved` and/or `status`).
+
 ## Conventions
 - Secrets live only in `backend/.env`; `frontend/.env` holds only `VITE_GOOGLE_CLIENT_ID`. Both are gitignored;
   keep the `.env.example` files in sync when adding variables.
@@ -294,8 +331,10 @@ intake + resume + Career Profile; 9–14 are listed there. Build one at a time a
   exceptions or functions of the request (the phases run in parallel); `tests/test_roadmap.py::phase_reply`
   answers any phase and `generate(client)` returns the SSE events and the final state.
 - The graph runs in every test with a real `SqliteSaver` on `:memory:`. `conftest.py`'s autouse `searcher`
-  fixture replaces `web.get_searcher` and `verify.get_checker`: fill `searcher.results[skill]` (candidates or an
-  exception) and `searcher.link_status[url]`; `searcher.calls` records searches. `tests/test_course_graph.py`
+  fixture replaces `web.get_searcher`, `youtube.get_youtube` and `verify.get_checker`: fill
+  `searcher.results[skill]` / `searcher.youtube.results[skill]` (candidates or an exception) and
+  `searcher.link_status[url]`; `searcher.calls` / `searcher.youtube.calls` record searches. The real YouTube
+  client is tested over `httpx.MockTransport` (`tests/test_resource_sources.py`). `tests/test_course_graph.py`
   fakes the refinement LLM (`graph.get_client`): `messages.create` returns scripted actions, `messages.stream`
   the explanation. Test user ids must be unique across files (one shared in-memory DB).
 - New endpoints need a 401-without-login case in `tests/test_auth.py`.

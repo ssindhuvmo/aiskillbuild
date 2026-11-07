@@ -6,7 +6,8 @@ Search the web, then call `record_resources` once with the best results (at most
 suitable turns up, call it with an empty list.
 
 What makes a good result:
-- A specific course, tutorial, paper, book or hands-on project page that teaches this skill. Not a search
+- A specific course, video, article, tutorial, paper, book, GitHub repository or hands-on project page that
+  teaches this skill. Not a search
   page, a list of "top 10 courses", a forum thread, a news article or a marketing page.
 - From a provider people trust: universities, well-known course platforms, official documentation,
   recognised researchers and practitioners.
@@ -34,6 +35,11 @@ Operations:
   null when they said nothing about cost.
 - `favour_formats`: formats to put first ("more hands-on projects" → ["project"]). Leave it null when
   they said nothing about formats; use [] to clear an earlier preference.
+- `levels`: show only these levels ("only beginner material" → ["beginner"]). Leave it null when they said
+  nothing about levels; use [] to show every level again.
+- `types`: show only these kinds ("only videos and courses" → ["video", "course"]; papers and tutorials
+  count as "article", GitHub repositories as "repository"). Leave it null when they said nothing about it;
+  use [] to show every kind again. Use `favour_formats` instead when they want more of a kind, not only it.
 - `known_skills`: skill gaps the user says they already know, using the gap's skill name exactly as
   listed. If what they know is not one of the gaps, remove the resources that teach it with `remove_ids`
   instead.

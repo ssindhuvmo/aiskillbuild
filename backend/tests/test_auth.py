@@ -28,6 +28,8 @@ PROTECTED = [
     ("post", "/api/resources/chat", {"message": "remove the first one"}),
     ("post", "/api/resources/remove", {"resource_id": "x"}),
     ("post", "/api/resources/approve", None),
+    ("post", "/api/resources/filter", {"types": ["video"]}),
+    ("put", "/api/resources/progress", {"resource_id": "x", "saved": True}),
     ("get", "/api/roadmap", None),
     ("post", "/api/roadmap/generate", None),
     ("get", "/api/roadmap/export.md", None),

@@ -62,7 +62,12 @@ export const adjustGap = (action, skill, make_room = []) =>
 export const getResources = () => request("/api/resources");
 export const searchResources = () => request("/api/resources/search", json("POST"));
 export const removeResource = (resource_id) => request("/api/resources/remove", json("POST", { resource_id }));
-export const approveResources =() => request("/api/resources/approve", json("POST"));
+export const approveResources = () => request("/api/resources/approve", json("POST"));
+// The filter chips: {cost: "any" | "free" | "paid", levels: [...], types: [...]}; [] means no filter.
+export const filterResources = (filters) => request("/api/resources/filter", json("POST", filters));
+// Save / Start / Complete on one resource: change is {saved} and/or {status}.
+export const setResourceProgress = (resource_id, change) =>
+  request("/api/resources/progress", json("PUT", { resource_id, ...change }));
 
 export const getRoadmap = () => request("/api/roadmap");
 
