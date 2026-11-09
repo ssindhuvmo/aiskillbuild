@@ -360,13 +360,13 @@ LangGraph remains limited to flows with a real pause-for-user loop.
    behavior changes. — done
 8. **Expanded intake, resume upload and Career Profile** (BR-01 to BR-07, BR-09 to
    BR-12). New profile fields with Alembic migrations, resume parser, gap analysis
-   using resume data and the capability assessment, skill gap chart. — built, in testing
+   using resume data and the capability assessment, skill gap chart. — done
 9. **Resource sources and preferences** (BR-17, BR-20, BR-21). YouTube source,
-   preference- and budget-aware ranking, filters, Save / Start / Complete. — built, in testing
+   preference- and budget-aware ranking, filters, Save / Start / Complete. — done
 10. **Roadmap tracking and Transition Report** (BR-18, BR-19, BRD 8.4). Status,
-    due dates, checkboxes, no padding, immediate next steps, the report, PDF export. — built, in testing
+    due dates, checkboxes, no padding, immediate next steps, the report, PDF export. — done
 11. **Dashboard and Progress Review** (BR-22 to BR-25). Metrics and charts,
-    progress updates, gap reassessment, replanning of remaining weeks. — built, in testing
+    progress updates, gap reassessment, replanning of remaining weeks. — done
 12. **Job Match** (BR-26).
 13. **Resume Optimizer** (BR-27).
 14. **Polish.** Accessibility and mobile pass, View Demo account, performance

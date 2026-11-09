@@ -3,7 +3,7 @@
 Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full
 specification (v2).
 
-**Current status: Milestone 11 of 14** (see Milestones in `SPEC.md`):
+**Current status: Milestones 1–11 of 14 done** (see Milestones in `SPEC.md`):
 1. React + FastAPI skeleton and conversational intake — done
 2. Google sign-in with per-user sessions — done
 3. Skill-gap analysis with user corrections — done
@@ -12,13 +12,13 @@ specification (v2).
 6. Live web search + refinement chat (LangGraph) — done
 7. Design system and app shell (dark theme, sidebar, Home page, restyled pages) — done
 8. Expanded intake, resume upload and Career Profile (capability assessment, preferences, constraints,
-   evidence-based skill analysis with a gap chart, Alembic migrations) — built, in testing
+   evidence-based skill analysis with a gap chart, Alembic migrations) — done
 9. Resource sources and preferences (YouTube source, preference- and budget-aware ranking, filters,
-   Save / Start / Complete) — built, in testing
+   Save / Start / Complete) — done
 10. Roadmap tracking and Transition Report (start date, due dates, priority, status, checkboxes, immediate
-    next steps, PDF export, the AI Career Transition Report) — built, in testing
+    next steps, PDF export, the AI Career Transition Report) — done
 11. Dashboard and Progress Review (readiness score, skill coverage, roadmap completion, radar and trend
-    charts, completed skills, confidence ratings, notes, refreshing the remaining weeks) — built, in testing
+    charts, completed skills, confidence ratings, notes, refreshing the remaining weeks) — done
 
 The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (View Demo, Jobs
 Applied) are not built yet. Job Match and Resume Optimizer are placeholders in the sidebar.
