@@ -36,6 +36,23 @@ def generate(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
+@router.post("/refresh")
+def refresh(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """SSE (Progress Review, "Refresh my plan"): done work stays, the remaining weeks are replanned and the
+    phases that are not over get new text (see agent.refresh)."""
+    try:
+        agent.check_refresh(db, user.user_id)
+    except (agent.NoCurrentRoadmap, agent.AlreadyRunning) as e:
+        raise HTTPException(409, str(e))
+    user_id = user.user_id
+
+    def event_stream():
+        for event in agent.refresh(user_id):
+            yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
 @router.put("/start-date", response_model=RoadmapState)
 def set_start_date(body: StartDateIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     try:

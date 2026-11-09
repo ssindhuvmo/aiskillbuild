@@ -320,3 +320,21 @@ input:disabled, select:disabled { opacity: .6; }
   .home-inner { padding-left: 16px; padding-right: 16px; }
   .hero { padding-top: 24px; padding-bottom: 40px; gap: 32px; }
 }
+
+/* Dashboard and Progress Review (milestone 11) */
+.metric-detail { margin-top: 4px; font-size: var(--text-small); color: var(--color-text-muted); }
+.fields-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.plan-status { font-weight: 600; }
+.plan-on_track, .plan-complete { color: var(--color-success); }
+.plan-behind { color: var(--color-danger); }
+.row-between { justify-content: space-between; }
+.chart { width: 100%; min-width: 0; }
+.chart .recharts-legend-item-text { color: var(--color-text) !important; }
+.refresh-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-gap); border: 1px solid var(--color-primary); }
+.refresh-banner > .stack-tight { flex: 1 1 320px; }
+.refresh-side { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+.check-list { display: flex; flex-direction: column; }
+.check-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: var(--control-min-height); cursor: pointer; }
+.check-row input { width: 18px; height: 18px; min-height: 0; padding: 0; accent-color: var(--color-primary); cursor: pointer; }
+.check-row .muted { margin-left: auto; }
+input[type="range"] { min-height: var(--control-min-height); padding: 0; border: 0; background: transparent; accent-color: var(--color-primary); cursor: pointer; }

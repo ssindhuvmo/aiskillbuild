@@ -53,6 +53,8 @@ user's resume, and projects the user hasn't done yet are listed separately, not 
 
 - The AI Career Transition Report view (SPEC.md section 8) has no mockup. It was built in milestone 10 at
   `/report` (sidebar item "Transition Report") with the same card and type styles; the Dashboard's "View
-  Transition Report" button will link to it.
+  Transition Report" button links to it (milestone 11).
+- The Dashboard radar shows the plan's skill gaps rather than the five capability areas (only gaps have a
+  saved target level), and Jobs Applied shows a placeholder until Job Match (milestone 12).
 - Sign-in, loading, error and empty states. Use the existing progress messages and error handling, restyled
   with these tokens.

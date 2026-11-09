@@ -118,6 +118,40 @@ class RoadmapItemProgress(Base):
     done_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class SkillProgress(Base):
+    """Progress Review: one plan gap marked completed and/or rated for confidence (self-reported, BR-23).
+    Keyed by the normalized skill name; rows for skills no longer in the plan are ignored, not deleted."""
+
+    __tablename__ = "skill_progress"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    skill: Mapped[str] = mapped_column(String(120), primary_key=True)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    confidence: Mapped[int | None] = mapped_column(Integer)  # 1-5, None = not rated
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class ProgressNotes(Base):
+    """Progress Review: the user's free-text notes."""
+
+    __tablename__ = "progress_notes"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class ReadinessHistory(Base):
+    """The readiness score as recorded on a day (one row per day, the last recording wins): the dashboard's
+    progress trend. Recorded by Update Progress, Recalculate, Refresh my plan and roadmap checks."""
+
+    __tablename__ = "readiness_history"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    score: Mapped[int] = mapped_column(Integer)  # 0-100
+    covered: Mapped[int] = mapped_column(Integer)  # skills covered ...
+    needed: Mapped[int] = mapped_column(Integer)  # ... of the skills the role needs
+    completion: Mapped[int] = mapped_column(Integer)  # roadmap completion, 0-100
+
+
 class ReportRecord(Base):
     """The user's AI Career Transition Report: only the LLM's two sections are stored; the rest is
     assembled from saved data when it is read. Stale when the snapshot differs."""

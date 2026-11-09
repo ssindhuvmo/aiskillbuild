@@ -3,7 +3,10 @@
 Python builds the plan (placement.place) and budget.check_budget asserts it; it is saved and sent at once.
 Then the three phases' text is written by the LLM in parallel (narrative.write), and each phase is applied,
 saved and streamed as it arrives. A phase whose text fails keeps placement's default text, so generating
-never fails because of the LLM. The routes call only check_ready, state_for_user and generate.
+never fails because of the LLM. The routes call only check_ready, state_for_user, generate and refresh.
+
+refresh (Progress Review, "Refresh my plan") replans only the remaining weeks with placement.replan: done work
+stays, unfinished work moves to the current week and later, and only the phases that are not over get new text.
 """
 import logging
 import threading
@@ -17,7 +20,7 @@ from sqlalchemy.orm import Session
 from core import repository
 from core.agents.scheduler import narrative
 from core.agents.scheduler.budget import check_budget
-from core.agents.scheduler.placement import place
+from core.agents.scheduler.placement import place, replan
 from core.agents.scheduler.schemas import Roadmap, SchedulerInput
 from core.db import SessionLocal
 from core.llm import LLMUnavailable, friendly_error
@@ -39,6 +42,10 @@ class AlreadyRunning(Exception):
 
 class PlacementFailed(Exception):
     """check_budget rejected a placed plan: a bug in placement, never an LLM problem."""
+
+
+class NoCurrentRoadmap(Exception):
+    """Refresh needs a roadmap built from the current approved list."""
 
 
 def _lock(user_id: str) -> threading.Lock:
@@ -90,10 +97,41 @@ def _event(state: RoadmapState | None, **extra) -> dict:
     return {"type": "state", **({"state": state.model_dump(mode="json")} if state else {}), **extra}
 
 
+def check_refresh(db: Session, user_id: str) -> None:
+    state = repository.get_roadmap_state(db, user_id)
+    if state.roadmap is None or state.stale:
+        raise NoCurrentRoadmap("Build your roadmap from your current resource list first.")
+    if _lock(user_id).locked():
+        raise AlreadyRunning("Your roadmap is already being built. Wait for it to finish.")
+
+
+def rebuild(db: Session, user_id: str, data: SchedulerInput) -> tuple[Roadmap, int]:
+    """The saved roadmap with its remaining weeks replanned, checked against the budget rules."""
+    inputs = repository.refresh_inputs(db, user_id)
+    if inputs is None:
+        raise NoCurrentRoadmap("Build your roadmap from your current resource list first.")
+    roadmap = replan(data, inputs.roadmap, inputs.done, inputs.from_week, inputs.completed_resources,
+                     inputs.completed_gaps)
+    if problems := check_budget(roadmap, data, inputs.from_week):
+        log.error("Scheduler replan broke the budget rules: %s", "; ".join(problems))
+        raise PlacementFailed("Something went wrong while replanning your weeks. Please try again.")
+    return roadmap, inputs.from_week
+
+
 def generate(user_id: str) -> Iterator[dict]:
     """SSE events: `state` with the placed roadmap, then one `state` per phase as its text arrives (`phase`,
     and `notice` when the default text was kept), then `done`; `error` if the plan can't be built.
     Opens its own DB session (it outlives the request)."""
+    yield from _run(user_id, refresh=False)
+
+
+def refresh(user_id: str) -> Iterator[dict]:
+    """Like generate, but keeps the done work and replans from the current week (placement.replan). Phases that
+    are over keep their text; the others are written again. Records today's readiness when finished."""
+    yield from _run(user_id, refresh=True)
+
+
+def _run(user_id: str, refresh: bool) -> Iterator[dict]:
     lock = _lock(user_id)
     if not lock.acquire(blocking=False):
         yield {"type": "error", "message": "Your roadmap is already being built. Wait for it to finish."}
@@ -101,21 +139,27 @@ def generate(user_id: str) -> Iterator[dict]:
     db = SessionLocal()
     pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="roadmap-narrative")
     roadmap = None
+    mode = "refresh" if refresh else None
     started = time.monotonic()
     timings: list[str] = []
     try:
         try:
             data, snapshot = _input(db, user_id)
-            roadmap = build(data)
-        except (ListNotApproved, PlacementFailed) as e:
+            if refresh:
+                roadmap, from_week = rebuild(db, user_id, data)
+            else:
+                roadmap = build(data)
+        except (ListNotApproved, PlacementFailed, NoCurrentRoadmap) as e:
             yield {"type": "error", "message": str(e)}
             return
-        yield _event(repository.save_roadmap(db, user_id, roadmap, snapshot, log=False))
+        pending = [p for p in roadmap.phases if p.narrative == "pending"]
+        state = repository.save_roadmap(db, user_id, roadmap, snapshot, log=not pending, mode=mode)
+        yield _event(state, **({"from_week": from_week} if refresh else {}))
         placed = time.monotonic() - started
 
         futures = {
             pool.submit(narrative.write, data, roadmap.model_copy(deep=True), phase): phase.number
-            for phase in roadmap.phases
+            for phase in pending
         }
         for future in as_completed(futures):
             number, notice = futures[future], None
@@ -132,10 +176,12 @@ def generate(user_id: str) -> Iterator[dict]:
                 narrative.use_default(roadmap, number)
             timings.append(f"phase {number} {roadmap.phases[number - 1].narrative} {time.monotonic() - started:.1f} s")
             last = all(p.narrative != "pending" for p in roadmap.phases)
-            state = repository.update_roadmap(db, user_id, roadmap, log_snapshot=snapshot if last else None)
+            state = repository.update_roadmap(db, user_id, roadmap, log_snapshot=snapshot if last else None, mode=mode)
             yield _event(state, phase=number, notice=notice)
-        log.info("Roadmap generated: plan placed in %.2f s; %s; total %.1f s",
+        log.info("Roadmap %s: plan placed in %.2f s; %s; total %.1f s", "refreshed" if refresh else "generated",
                  placed, ", ".join(timings), time.monotonic() - started)
+        if refresh:
+            repository.record_readiness(db, user_id)
         yield {"type": "done"}
     finally:
         pool.shutdown(wait=False, cancel_futures=True)

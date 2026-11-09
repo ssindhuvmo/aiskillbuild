@@ -4,6 +4,7 @@ import { downloadRoadmap, generateRoadmap, getRoadmap, setRoadmapItem, setStartD
 import Button from "../components/Button.jsx";
 import Card from "../components/Card.jsx";
 import MetricCard from "../components/MetricCard.jsx";
+import NextSteps from "../components/NextSteps.jsx";
 import Notice from "../components/Notice.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import Progress from "../components/Progress.jsx";
@@ -230,28 +231,7 @@ export default function Roadmap() {
       </Card>
 
       <Card title="Immediate next steps" className="split-side">
-        {tracking.next_steps.length ? (
-          <ol className="next-steps">
-            {tracking.next_steps.map((step) => (
-              <li key={step.task_id}>
-                <span>
-                  {step.title}
-                  {step.resource && (
-                    <>
-                      {" · "}
-                      <a href={step.resource.url} target="_blank" rel="noopener noreferrer">{step.resource.title} ↗</a>
-                    </>
-                  )}
-                </span>
-                <span className={step.overdue ? "next-step-meta overdue" : "next-step-meta"}>
-                  {step.hours} h · {step.overdue ? `overdue since ${formatDay(step.due)}` : `week ${step.week}, due ${formatDay(step.due)}`}
-                </span>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p>Every task is done. Well done!</p>
-        )}
+        <NextSteps steps={tracking.next_steps} />
         <label className="field">
           Start date (week 1 begins)
           <input

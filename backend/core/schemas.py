@@ -8,6 +8,7 @@ from core.agents.gap_analysis.schemas import BudgetSuggestion, Correction, GapAn
 from core.agents.resume_parser.schemas import ResumeData
 from core.agents.scheduler.schemas import Roadmap, RoadmapTracking
 from core.knowledge.schemas import Level, Resource
+from core.progress.schemas import Dashboard, ProgressReview
 
 
 class UserOut(BaseModel):
@@ -182,3 +183,13 @@ class StartDateIn(BaseModel):
 class RoadmapItemIn(BaseModel):
     item_id: str = Field(min_length=1, max_length=20)  # a task id ("w3-1") or a month milestone ("m2")
     done: bool
+
+
+class DashboardState(BaseModel):
+    status: Literal["none", "ready"]  # none: run the skill-gap analysis first
+    dashboard: Dashboard | None = None
+
+
+class ProgressState(BaseModel):
+    status: Literal["none", "ready"]  # none: run the skill-gap analysis first
+    review: ProgressReview | None = None

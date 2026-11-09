@@ -22,6 +22,8 @@ milestones; `README.md` has setup steps. Build only the current milestone.
     `llm.py` — Anthropic client and `friendly_error`. `pdf.py` — the fpdf2 `Document` writer for every PDF
     export, with DejaVu Sans bundled in `core/fonts/` (fpdf2's built-in fonts are Latin-1 only).
   - `knowledge/` — the knowledge base (`store.py`) and the retrieval layer (`retriever.py`).
+  - `progress/` — Dashboard and Progress Review (milestone 11, no LLM): `readiness.py` (the formula),
+    `assemble.py` (dashboard and review from `ProgressData`), `schemas.py`, `service.py` (what the routes call).
 - `backend/config/domains.json` — supported domains (edit here, not in code).
 - `backend/data/knowledge_base.json` — curated resources + skill-tag vocabulary (edit here, not in code).
 - `backend/data/youtube_channels.json` — trusted YouTube channels by channel id (edit here, not in code).
@@ -36,8 +38,8 @@ milestones; `README.md` has setup steps. Build only the current milestone.
 ## Milestones
 Numbered in `SPEC.md`: 1 intake, 2 Google sign-in, 3 skill gaps, 4 knowledge base + ranking, 5 resource approval +
 scheduler + roadmap, 6 live web search + refinement (LangGraph), 7 design system and app shell, 8 expanded
-intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap tracking + Transition Report;
-11–14 are listed there. Build one at a time and stop for testing after each.
+intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap tracking + Transition Report,
+11 Dashboard + Progress Review; 12–14 are listed there. Build one at a time and stop for testing after each.
 
 ## Orchestration decision: LangGraph for course search only
 - The course search agent and conversational refinement (flow steps 4–5) are one LangGraph graph in
@@ -341,6 +343,40 @@ intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap
   date, Immediate next steps, Export PDF, View Transition Report. `pages/Report.jsx` at `/report` (sidebar
   "Transition Report").
 
+## Dashboard and Progress Review (Milestone 11)
+- Every number is Python (`core/progress/readiness.py`, formula in its docstring, README and SPEC §4): per plan
+  gap, `base` = current / target level index on `TARGET_LEVELS`; `progress` = 1 if marked completed, else the
+  share of its approved resources' learn + practice hours done (checked tasks, or the whole resource when
+  `resource_progress` says completed), averaged with `(confidence − 1) / 4` when rated; `credit` = base +
+  (1 − base) × progress. Readiness = (strengths + Σ `WEIGHTS`·credit) / (strengths + Σ weights), weights 3/2/1
+  by priority. Coverage = strengths + gaps at full credit, of strengths + plan gaps. Completion =
+  `tracking.done_hours / planned_hours`. `planned_series` = the same per week over the scheduled hours. A gap's
+  hours come from the approved list the roadmap was built from (`built_from`), so a replan doesn't move them.
+- Tables (migration 0006): `skill_progress` (user, normalized skill: `completed`, `confidence` 1–5),
+  `progress_notes`, `readiness_history` (one row per user and day, last write wins). All in
+  `delete_user_data`. Marks for skills no longer in the plan are ignored, not deleted.
+- `repository.progress_data` gathers `assemble.ProgressData` (None without a gap analysis);
+  `assemble.dashboard` / `assemble.review` build the pages on every read. `record_readiness` upserts today's
+  point; it is called by Update Progress, Recalculate, refresh, `set_item_done` and `set_progress` (status
+  change) and never fails the request.
+- Refresh my plan (BR-24/25) is plain Python, no gap re-analysis, so the approved list and snapshots stay valid:
+  `placement.replan(data, roadmap, done, from_week, completed_resources, completed_gaps)` keeps every done task
+  (same week, id, hours, so fingerprints match), closes weeks before `from_week` (`assemble.from_week`: this
+  week clamped to 1–26), places each resource's remaining learn/practice hours from there, drops completed
+  resources and gaps, puts undone project hours of phases that are over first ("Phase N portfolio project",
+  which `narrative.apply` doesn't rename), and keeps those phases' text (`closed_phases`); other phases are
+  `pending`. New ids continue each week's numbering. `check_budget(..., from_week)` exempts closed phases from
+  the project rule. `agent.refresh` shares `_run` with `generate` (lock, SSE, only pending phases written,
+  start date and snapshot kept, logged with `mode: "refresh"`).
+- Endpoints: `GET /api/dashboard` (`DashboardState`), `POST /api/dashboard/readiness`, `GET|PUT /api/progress`
+  (`ProgressState`, `ProgressReviewIn`; 409 without an analysis, 422 for a skill not in the plan or confidence
+  outside 1–5), `POST /api/roadmap/refresh` (SSE; first `state` event has `from_week`; 409 without a current
+  roadmap or while running).
+- Frontend: `pages/Dashboard.jsx` (lazy-loaded in `App.jsx`, so Recharts stays out of the main bundle),
+  `pages/ProgressReview.jsx`, `components/Charts.jsx` (`SkillRadar`, `ReadinessTrend`; Recharts can't use CSS
+  variables, so `tokens()` reads them at render), `components/NextSteps.jsx` (shared with Roadmap). The radar
+  axes are the plan gaps (fewer than 3 → a plain list); Jobs Applied is a placeholder until milestone 12.
+
 ## Conventions
 - Secrets live only in `backend/.env`; `frontend/.env` holds only `VITE_GOOGLE_CLIENT_ID`. Both are gitignored;
   keep the `.env.example` files in sync when adding variables.
@@ -370,6 +406,9 @@ intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap
   fakes the refinement LLM (`graph.get_client`): `messages.create` returns scripted actions, `messages.stream`
   the explanation. Test user ids must be unique across files (one shared in-memory DB).
 - New endpoints need a 401-without-login case in `tests/test_auth.py`.
+- Progress: `tests/test_readiness.py` (pure formula), `tests/test_replan.py` (pure `replan` plus the refresh
+  endpoint; call `fake()` again before a refresh so the narrative fake has replies), `tests/test_progress.py`
+  (endpoints, history per day, isolation; uses `test_roadmap_tracking.today`).
 - Tracking: `tests/test_roadmap_tracking.py` (pure `track` plus endpoints; its `today` fixture patches
   `repository.today`). Report: `tests/test_report.py` `report_llm` fixture patches `report.agent.get_client`
   (valid text by default; pass dicts, exceptions or functions to script replies).

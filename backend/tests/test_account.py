@@ -24,12 +24,15 @@ def row_counts(sub):
 
 
 def full_user(client, sub, fake_gaps, fake):  # noqa: F811
-    """Signed in with data in every table: profile, chat, gaps, resources, approval, roadmap, checks and report."""
+    """Signed in with data in every table: profile, chat, gaps, resources, approval, roadmap, checks, report and
+    progress review."""
     ids = approved_user(client, sub, fake_gaps)
     generate(client)
     assert client.put("/api/resources/progress", json={"resource_id": ids[0], "saved": True}).status_code == 200
     assert client.put("/api/roadmap/items", json={"item_id": "m1", "done": True}).status_code == 200
     assert client.post("/api/report/generate").status_code == 200
+    skill = client.get("/api/progress").json()["review"]["skills"][0]["skill"]
+    assert client.put("/api/progress", json={"skills": [{"skill": skill, "confidence": 3}], "notes": "Going well."}).status_code == 200
     with dbmod.SessionLocal() as db:
         repository.append_message(db, sub, "user", "hello")
         # The resume row directly (tests/test_resume_api.py covers uploads and their files).

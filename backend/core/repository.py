@@ -1,4 +1,6 @@
 """All database access lives here so routes stay free of business logic."""
+import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 from pydantic import ValidationError
@@ -17,13 +19,19 @@ from core.agents.scheduler import tracking
 from core.agents.scheduler.schemas import Roadmap
 from core.knowledge.schemas import Candidate, Resource, SearchProfile
 from core.models import (
-    AgentOutput, ApprovedListRecord, Conversation, GapAnalysisRecord, Profile, ReportRecord, ResourceListRecord,
-    ResourceProgress, Resume, RoadmapItemProgress, RoadmapRecord, User, WebResourceCandidate, WebSearchCache, _now,
+    AgentOutput, ApprovedListRecord, Conversation, GapAnalysisRecord, Profile, ProgressNotes, ReadinessHistory,
+    ReportRecord, ResourceListRecord, ResourceProgress, Resume, RoadmapItemProgress, RoadmapRecord, SkillProgress, User,
+    WebResourceCandidate, WebSearchCache, _now,
 )
+from core.progress import assemble, readiness
+from core.progress.schemas import ProgressReviewIn
 from core.schemas import (
     ChatMessage, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceProgressOut, ResourceState, ResumeState,
     RoadmapState, RoleSuggestion,
 )
+
+
+log = logging.getLogger(__name__)
 
 
 class ValidationFailed(Exception):
@@ -55,7 +63,7 @@ def delete_user_data(db: Session, user_id: str) -> None:
     keeps working. Any new table with a user_id must be added here."""
     for model in (
         ReportRecord, RoadmapItemProgress, RoadmapRecord, ApprovedListRecord, ResourceListRecord, ResourceProgress,
-        GapAnalysisRecord, AgentOutput, Conversation, Resume, Profile,
+        GapAnalysisRecord, AgentOutput, Conversation, Resume, Profile, SkillProgress, ProgressNotes, ReadinessHistory,
     ):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     db.commit()
@@ -498,6 +506,8 @@ def set_progress(db: Session, user_id: str, resource: Resource, saved: bool | No
         else:
             db.delete(row)
     db.commit()
+    if status is not None:
+        record_readiness(db, user_id)
 
 
 # --- Web search cache (shared across users, no user data) ----------------------------
@@ -670,12 +680,15 @@ def set_item_done(db: Session, user_id: str, item_id: str, done: bool) -> Roadma
     elif row is not None:
         db.delete(row)
     db.commit()
+    record_readiness(db, user_id)
     return get_roadmap_state(db, user_id)
 
 
-def save_roadmap(db: Session, user_id: str, roadmap: Roadmap, snapshot: dict, log: bool = True) -> RoadmapState:
+def save_roadmap(
+    db: Session, user_id: str, roadmap: Roadmap, snapshot: dict, log: bool = True, mode: str | None = None,
+) -> RoadmapState:
     """Replace the user's roadmap. log=False for a plan whose text is still being written (update_roadmap logs
-    the finished one)."""
+    the finished one). mode="refresh" marks a Progress Review replan in the log."""
     data = roadmap.model_dump(mode="json")
     record = db.get(RoadmapRecord, user_id)
     if record is None:
@@ -686,12 +699,18 @@ def save_roadmap(db: Session, user_id: str, roadmap: Roadmap, snapshot: dict, lo
     record.roadmap = data
     record.snapshot = snapshot
     if log:
-        db.add(AgentOutput(user_id=user_id, agent="scheduler", output={"input": snapshot, "roadmap": data}))
+        db.add(AgentOutput(user_id=user_id, agent="scheduler", output=_scheduler_log(snapshot, data, mode)))
     db.commit()
     return get_roadmap_state(db, user_id)
 
 
-def update_roadmap(db: Session, user_id: str, roadmap: Roadmap, log_snapshot: dict | None = None) -> RoadmapState | None:
+def _scheduler_log(snapshot: dict, roadmap: dict, mode: str | None) -> dict:
+    return {"input": snapshot, "roadmap": roadmap, **({"mode": mode} if mode else {})}
+
+
+def update_roadmap(
+    db: Session, user_id: str, roadmap: Roadmap, log_snapshot: dict | None = None, mode: str | None = None,
+) -> RoadmapState | None:
     """Save new text into the existing roadmap (snapshot unchanged); None if it was deleted meanwhile ("Start
     over"). With log_snapshot, the finished roadmap is logged to agent_outputs."""
     record = db.get(RoadmapRecord, user_id)
@@ -700,7 +719,7 @@ def update_roadmap(db: Session, user_id: str, roadmap: Roadmap, log_snapshot: di
     data = roadmap.model_dump(mode="json")
     record.roadmap = data
     if log_snapshot is not None:
-        db.add(AgentOutput(user_id=user_id, agent="scheduler", output={"input": log_snapshot, "roadmap": data}))
+        db.add(AgentOutput(user_id=user_id, agent="scheduler", output=_scheduler_log(log_snapshot, data, mode)))
     db.commit()
     return get_roadmap_state(db, user_id)
 
@@ -749,3 +768,111 @@ def save_report(db: Session, user_id: str, narrative: dict, source: str, snapsho
     db.add(AgentOutput(user_id=user_id, agent="report", output={"source": source, "narrative": narrative}))
     db.commit()
     return record
+
+
+# --- Progress Review and Dashboard (milestone 11) -------------------------------------
+
+
+def _marks(db: Session, user_id: str) -> dict[str, readiness.SkillMark]:
+    rows = db.query(SkillProgress).filter_by(user_id=user_id).all()
+    return {r.skill: readiness.SkillMark(completed=r.completed, confidence=r.confidence) for r in rows}
+
+
+def progress_data(db: Session, user_id: str) -> assemble.ProgressData | None:
+    """Everything the Dashboard and Progress Review are worked out from; None without a gap analysis."""
+    gap_state = get_gap_state(db, user_id)
+    if gap_state.analysis is None:
+        return None
+    record = db.get(RoadmapRecord, user_id)
+    state = get_roadmap_state(db, user_id) if record is not None else None
+    roadmap = state.roadmap if state else None
+    progress = db.query(ResourceProgress).filter_by(user_id=user_id).all()
+    notes = db.get(ProgressNotes, user_id)
+    history = db.query(ReadinessHistory).filter_by(user_id=user_id).order_by(ReadinessHistory.day).all()
+    return assemble.ProgressData(
+        current_role=gap_state.profile.current_role,
+        target_role=gap_state.profile.target_role,
+        analysis=gap_state.analysis,
+        approved=built_from(record) if record is not None else get_approved_list(db, user_id),
+        roadmap=roadmap,
+        roadmap_stale=bool(state and state.stale),
+        tracking=state.tracking if state else None,
+        done=done_items(db, user_id, roadmap) if roadmap else set(),
+        completed_resources={r.resource_id for r in progress if r.status == "completed"},
+        resource_status={r.resource_id: (r.status, r.completed_at) for r in progress},
+        marks=_marks(db, user_id),
+        notes=notes.notes if notes else "",
+        history=[(h.day, h.score) for h in history],
+        today=today(),
+    )
+
+
+def record_readiness(db: Session, user_id: str) -> None:
+    """Record today's readiness for the progress trend (one row per day; the last recording wins). Never fails
+    the request that triggered it."""
+    try:
+        data = progress_data(db, user_id)
+        if data is None:
+            return
+        now = assemble.current(data)
+        t = data.tracking
+        row = db.get(ReadinessHistory, (user_id, data.today))
+        if row is None:
+            row = ReadinessHistory(user_id=user_id, day=data.today)
+            db.add(row)
+        row.score, row.covered, row.needed = now.score, now.covered, now.needed
+        row.completion = readiness.completion(t.done_hours, t.planned_hours) if t else 0
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception("Could not record the readiness score")
+
+
+def save_progress_review(db: Session, user_id: str, body: ProgressReviewIn) -> None:
+    """Update Progress: the plan gaps' completed / confidence marks and the notes. Only skills in the current
+    plan are accepted; skills left out keep their saved marks."""
+    gap_state = get_gap_state(db, user_id)
+    if gap_state.analysis is None:
+        raise NotReady("Run your skill-gap analysis first.")
+    plan = {readiness.norm(g.skill) for g in gap_state.analysis.gaps}
+    unknown = [m.skill for m in body.skills if readiness.norm(m.skill) not in plan]
+    if unknown:
+        raise ValidationFailed({"skills": "Not in your plan: " + ", ".join(unknown) + ". Reload the page."})
+    for mark in body.skills:
+        key = readiness.norm(mark.skill)
+        row = db.get(SkillProgress, (user_id, key))
+        if row is None:
+            row = SkillProgress(user_id=user_id, skill=key)
+            db.add(row)
+        row.completed, row.confidence, row.updated_at = mark.completed, mark.confidence, _now()
+    notes = db.get(ProgressNotes, user_id)
+    if notes is None:
+        notes = ProgressNotes(user_id=user_id)
+        db.add(notes)
+    notes.notes, notes.updated_at = body.notes.strip(), _now()
+    db.commit()
+    record_readiness(db, user_id)
+
+
+@dataclass
+class RefreshInputs:
+    roadmap: Roadmap
+    done: set[str]
+    from_week: int
+    completed_resources: set[str]
+    completed_gaps: set[str]  # gap skill names as in the analysis
+
+
+def refresh_inputs(db: Session, user_id: str) -> RefreshInputs | None:
+    """What "Refresh my plan" replans from; None without a current roadmap."""
+    data = progress_data(db, user_id)
+    if data is None or data.roadmap is None or data.roadmap_stale:
+        return None
+    return RefreshInputs(
+        roadmap=data.roadmap,
+        done=data.done,
+        from_week=assemble.from_week(data.tracking),
+        completed_resources=data.completed_resources,
+        completed_gaps={g.skill for g in data.analysis.gaps
+                        if data.marks.get(readiness.norm(g.skill), readiness.SkillMark()).completed},
+    )

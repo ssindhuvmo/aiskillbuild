@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 import { getIntake, getMe, googleLogin, logout, setUnauthorizedHandler, startOver } from "./api.js";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
@@ -7,11 +7,15 @@ import Sidebar from "./components/Sidebar.jsx";
 import ComingSoon from "./pages/ComingSoon.jsx";
 import Home from "./pages/Home.jsx";
 import Intake from "./pages/Intake.jsx";
+import ProgressReview from "./pages/ProgressReview.jsx";
 import Resources from "./pages/Resources.jsx";
 import Report from "./pages/Report.jsx";
 import Roadmap from "./pages/Roadmap.jsx";
 import SkillGaps from "./pages/SkillGaps.jsx";
 import { ProfileContext } from "./profileContext.js";
+
+// The charts (Recharts) load only when the Dashboard is opened, so the first page stays light.
+const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 
 // The signed-in layout: sidebar on the left (a menu on a phone), the current page on the right.
 function Shell({ user, profile, onStartOver, onSignOut }) {
@@ -123,8 +127,8 @@ export default function App() {
           <Route path="/resources" element={<Resources />} />
           <Route path="/roadmap" element={<Roadmap />} />
           <Route path="/report" element={<Report />} />
-          <Route path="/dashboard" element={<ComingSoon title="Dashboard" subtitle="Your readiness, skill coverage and roadmap progress at a glance." milestone={11} />} />
-          <Route path="/progress" element={<ComingSoon title="Progress Review" subtitle="Report what you finished and refresh your plan." milestone={11} />} />
+          <Route path="/dashboard" element={<Suspense fallback={<p>Loading…</p>}><Dashboard /></Suspense>} />
+          <Route path="/progress" element={<ProgressReview />} />
           <Route path="/jobs" element={<ComingSoon title="Job Match" subtitle="Roles that fit the skills you have built." milestone={12} />} />
           <Route path="/resume" element={<ComingSoon title="Resume Optimizer" subtitle="Your resume, tailored to one job." milestone={13} />} />
           <Route path="*" element={<Navigate to="/intake" replace />} />

@@ -3,7 +3,7 @@
 Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full
 specification (v2).
 
-**Current status: Milestone 10 of 14** (see Milestones in `SPEC.md`):
+**Current status: Milestone 11 of 14** (see Milestones in `SPEC.md`):
 1. React + FastAPI skeleton and conversational intake — done
 2. Google sign-in with per-user sessions — done
 3. Skill-gap analysis with user corrections — done
@@ -17,10 +17,11 @@ specification (v2).
    Save / Start / Complete) — built, in testing
 10. Roadmap tracking and Transition Report (start date, due dates, priority, status, checkboxes, immediate
     next steps, PDF export, the AI Career Transition Report) — built, in testing
+11. Dashboard and Progress Review (readiness score, skill coverage, roadmap completion, radar and trend
+    charts, completed skills, confidence ratings, notes, refreshing the remaining weeks) — built, in testing
 
-The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (View Demo) are not
-built yet. Dashboard,
-Progress Review, Job Match and Resume Optimizer are placeholders in the sidebar.
+The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (View Demo, Jobs
+Applied) are not built yet. Job Match and Resume Optimizer are placeholders in the sidebar.
 
 ## Google sign-in setup (once)
 
@@ -191,7 +192,16 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
     If the AI's text isn't available, those two sections show plain text and the page says so. **Download
     PDF** / **Download Markdown** export it. Changing the profile, skills, resources or regenerating the
     roadmap marks the report out of date; ticking tasks only updates its next steps.
-12. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
+12. Open **Progress Review**. Tick the skills you can now do, move the **confidence** sliders, read which
+    courses you have finished (from **Complete** on Resources and the ticked roadmap tasks) and add notes, then
+    click **Update Progress**. **Recalculate Readiness Score** records today's score for the dashboard's trend.
+    When you fall behind (set the roadmap's start date a few weeks back to try it), the banner says by how many
+    hours; **Refresh my plan** keeps every ticked task where it is, drops completed skills and resources, moves
+    the unfinished work into this week and later, and rewrites the text of the phases that are not over.
+13. Open **Dashboard**: Readiness Score (with the change over the last week), Skill Coverage, Roadmap
+    Completion, the career summary with this week's next steps, the skill radar (today against target for each
+    gap in the plan), the readiness trend against the planned line, and each phase's completion.
+14. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
     resources, approval, roadmap, ticks and report reload. A different Google account starts empty. Editing the profile marks
     everything after it out of date: re-confirm the skills, **Rebuild the list**, approve it again, then
     **Regenerate Roadmap**. Refining the list after approval asks you to approve again, and the new approval
@@ -203,6 +213,16 @@ If the AI's text for a phase fails (no API key, an API error, or a reply that fa
 phase keeps plain default text and the page says so; the backend log has the reason
 (`Scheduler narrative for phase N ...`). Each run logs its timing at INFO: `Roadmap generated: plan placed in
 X s; phase N ai|default T s, ...; total T s`.
+
+**How the scores are calculated** (Python, `backend/core/progress/readiness.py`; the AI never supplies a
+number). For each gap in the plan: the starting credit is its current level over its target level (None 0,
+Beginner 1, Intermediate 2, Experienced 3, Expert 4); progress is 1 when you marked the skill completed,
+otherwise the share of its resources' learn + practice hours done (ticked roadmap tasks, or the whole resource
+when marked Complete), averaged with (confidence − 1) / 4 once you rate it; credit = start + (1 − start) ×
+progress. **Readiness** = (strengths + Σ weight × credit) / (strengths + Σ weight), with weight 3 / 2 / 1 for
+high / medium / low priority. **Skill Coverage** = strengths plus gaps at full credit, of strengths plus plan
+gaps. **Roadmap Completion** = ticked hours of planned hours. The planned trend line applies the same formula
+to the hours the roadmap schedules up to each week.
 
 Sample profiles: "Backend Engineer in FinTech → AI Engineer, Beginner, 8 hrs/week" and
 "Data Analyst in Healthcare → Data Scientist, None, 5 hrs/week".

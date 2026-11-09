@@ -148,3 +148,18 @@ export function generateRoadmap({ onState, onError }) {
     else if (evt.type === "error") onError(evt.message);
   }, onError);
 }
+
+// Dashboard and Progress Review (milestone 11). Every number comes from the backend.
+export const getDashboard = () => request("/api/dashboard");
+export const recalcReadiness = () => request("/api/dashboard/readiness", json("POST"));
+export const getProgressReview = () => request("/api/progress");
+export const saveProgressReview = (skills, notes) => request("/api/progress", json("PUT", { skills, notes }));
+
+// Refresh my plan: keeps the done work and replans the remaining weeks. Same events as generateRoadmap; the
+// first state event also carries `from_week`.
+export function refreshRoadmap({ onState, onError }) {
+  return streamEvents("/api/roadmap/refresh", undefined, (evt) => {
+    if (evt.type === "state" && evt.state) onState(evt);
+    else if (evt.type === "error") onError(evt.message);
+  }, onError);
+}

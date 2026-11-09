@@ -130,7 +130,8 @@ def apply(roadmap: Roadmap, number: int, n: PhaseNarrative) -> Roadmap:
             for task in week.tasks:
                 if task.kind == "practice" and task.id in titles:
                     task.title = titles[task.id]
-                elif task.kind == "project":
+                elif task.kind == "project" and task.title.startswith("Portfolio project"):
+                    # (a replan's catch-up project of an earlier phase keeps its own title)
                     task.title = _project_title(n.project.title, task.title)
     return roadmap
 

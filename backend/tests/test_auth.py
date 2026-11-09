@@ -40,6 +40,11 @@ PROTECTED = [
     ("post", "/api/report/generate", None),
     ("get", "/api/report/export.md", None),
     ("get", "/api/report/export.pdf", None),
+    ("post", "/api/roadmap/refresh", None),
+    ("get", "/api/dashboard", None),
+    ("post", "/api/dashboard/readiness", None),
+    ("get", "/api/progress", None),
+    ("put", "/api/progress", {"skills": [], "notes": ""}),
     ("delete", "/api/account/data", None),
 ]
 

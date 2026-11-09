@@ -134,6 +134,19 @@ visit and editable at any time; edits mark later steps out of date.
 - Readiness Score, Skill Coverage and Roadmap Completion are calculated in plain
   Python from saved data with a documented formula, never by the LLM.
 
+How it is built (milestone 11):
+- Readiness: each plan gap starts with credit current level / target level and
+  moves toward 1 with its progress: 1 when marked completed, else the share of its
+  resources' learn + practice hours done, averaged with (confidence − 1) / 4 when
+  rated. Readiness = (strengths + Σ weight × credit) / (strengths + Σ weight), weight
+  3 / 2 / 1 by priority. Skill Coverage = strengths + gaps at full credit, of
+  strengths + plan gaps. Roadmap Completion = ticked hours / planned hours. The
+  formula is in `backend/core/progress/readiness.py` and the README.
+- The radar shows the plan's gaps (today against target on the level scale), not
+  the five capability areas, because only gaps have a saved target. The trend
+  shows one recorded score per day against the planned line (the same formula over
+  the hours scheduled up to each week). Jobs Applied waits for Job Match.
+
 ### 5. Skill Analysis (BR-13 to BR-16)
 - Existing skills as tags; missing skills as warning tags.
 - Skill gap chart: horizontal bars of current level against target level per skill.
@@ -242,6 +255,11 @@ For returning users:
 - **Refresh my plan** reassesses the gaps using the progress (BR-24) and offers an
   updated roadmap and next steps (BR-25). Completed work is kept; only the
   remaining weeks are replanned.
+- The reassessment is plain Python (no new gap analysis, so the approved list stays
+  valid): completed skills and completed resources leave the plan, the rest keeps
+  its remaining hours. Ticked tasks stay in their weeks; unfinished work moves to the
+  current week and later; phases that are over keep their text and the others are
+  written again. A full re-analysis is still available on Skill Analysis.
 - Completion is self-reported; nothing is verified with third parties.
 
 ### 10. Job Match (BR-26)
@@ -348,7 +366,7 @@ LangGraph remains limited to flows with a real pause-for-user loop.
 10. **Roadmap tracking and Transition Report** (BR-18, BR-19, BRD 8.4). Status,
     due dates, checkboxes, no padding, immediate next steps, the report, PDF export. — built, in testing
 11. **Dashboard and Progress Review** (BR-22 to BR-25). Metrics and charts,
-    progress updates, gap reassessment, replanning of remaining weeks.
+    progress updates, gap reassessment, replanning of remaining weeks. — built, in testing
 12. **Job Match** (BR-26).
 13. **Resume Optimizer** (BR-27).
 14. **Polish.** Accessibility and mobile pass, View Demo account, performance

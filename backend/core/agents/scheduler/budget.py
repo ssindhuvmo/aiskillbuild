@@ -40,9 +40,10 @@ def project_reserve(hours_per_week: int, phase: int) -> int:
     return max(1, round(PROJECT_SHARE * hours_per_week * len(phase_weeks(phase))))
 
 
-def check_budget(roadmap: Roadmap, data: SchedulerInput) -> list[str]:
+def check_budget(roadmap: Roadmap, data: SchedulerInput, from_week: int = 1) -> list[str]:
     """Returns problems; empty means the roadmap fits the calendar and the hour budget. Whole-plan problems
-    come first so the MAX_PROBLEMS cut never drops them."""
+    come first so the MAX_PROBLEMS cut never drops them. from_week: a replan, where a phase that is over
+    before from_week may have no project work left (its catch-up project moved to the open weeks)."""
     problems = []  # about the plan as a whole
     details = []  # about single weeks
     limit = data.hours_per_week
@@ -88,6 +89,8 @@ def check_budget(roadmap: Roadmap, data: SchedulerInput) -> list[str]:
     if [p.months for p in roadmap.phases] != [list(m) for m in PHASE_MONTHS]:
         problems.append("The roadmap must have exactly 3 phases of 2 months.")
     for phase, months in enumerate(PHASE_MONTHS, start=1):
+        if phase_weeks(phase)[-1] < from_week:
+            continue
         if not any(project_hours.get(m) for m in months):
             problems.append(f"Phase {phase} has no portfolio project work.")
     return (problems + details)[:MAX_PROBLEMS]
