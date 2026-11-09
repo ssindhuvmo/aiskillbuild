@@ -71,16 +71,27 @@ export const setResourceProgress = (resource_id, change) =>
 
 export const getRoadmap = () => request("/api/roadmap");
 
-// Fetches the Markdown export and saves it as a file.
-export async function downloadRoadmap() {
-  const res = await fetch("/api/roadmap/export.md");
+export const setStartDate = (start_date) => request("/api/roadmap/start-date", json("PUT", { start_date }));
+export const setRoadmapItem = (item_id, done) => request("/api/roadmap/items", json("PUT", { item_id, done }));
+
+// Fetches an export and saves it as a file.
+async function download(path, filename) {
+  const res = await fetch(path);
   if (res.status === 401) onUnauthorized();
   if (!res.ok) throw new Error(`Download failed (${res.status}).`);
   const url = URL.createObjectURL(await res.blob());
-  const a = Object.assign(document.createElement("a"), { href: url, download: "ai-career-roadmap.md" });
+  const a = Object.assign(document.createElement("a"), { href: url, download: filename });
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// format: "md" | "pdf"
+export const downloadRoadmap = (format = "md") => download(`/api/roadmap/export.${format}`, `ai-career-roadmap.${format}`);
+
+export const getReport = () => request("/api/report");
+export const generateReport = () => request("/api/report/generate", json("POST"));
+export const downloadReport = (format) =>
+  download(`/api/report/export.${format}`, `ai-career-transition-report.${format}`);
 
 // Posts to an SSE endpoint and calls onEvent(event) for each `data:` frame; failures go to onError(msg).
 async function streamEvents(path, body, onEvent, onError) {

@@ -346,7 +346,7 @@ LangGraph remains limited to flows with a real pause-for-user loop.
 9. **Resource sources and preferences** (BR-17, BR-20, BR-21). YouTube source,
    preference- and budget-aware ranking, filters, Save / Start / Complete. — built, in testing
 10. **Roadmap tracking and Transition Report** (BR-18, BR-19, BRD 8.4). Status,
-    due dates, checkboxes, no padding, immediate next steps, the report, PDF export.
+    due dates, checkboxes, no padding, immediate next steps, the report, PDF export. — built, in testing
 11. **Dashboard and Progress Review** (BR-22 to BR-25). Metrics and charts,
     progress updates, gap reassessment, replanning of remaining weeks.
 12. **Job Match** (BR-26).

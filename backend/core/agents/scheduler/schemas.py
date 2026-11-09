@@ -1,5 +1,7 @@
 """Inputs and outputs of the scheduler. placement.place builds the Roadmap in plain Python (weeks, tasks,
-hours, links); the LLM only writes a PhaseNarrative per phase, which narrative.apply copies into it."""
+hours, links); the LLM only writes a PhaseNarrative per phase, which narrative.apply copies into it.
+tracking.track adds dates, priority and status (RoadmapTracking) when the roadmap is read."""
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -106,3 +108,57 @@ class Roadmap(BaseModel):
     months: list[RoadmapMonth]
     phases: list[RoadmapPhase]
     unscheduled: list[ResourceLink] = []  # approved resources that did not fit in the plan
+
+
+# --- Tracking (tracking.track; worked out in Python on every read, never stored) ------
+
+Priority = Literal["high", "medium", "low"]
+# A task or month milestone: done (checked), overdue (due date passed), this_week, not_started (later).
+ItemStatus = Literal["done", "overdue", "this_week", "not_started"]
+# A week or phase: done (every item checked), overdue (a week past its due date with items left),
+# in_progress (current, or partly done), not_started, empty (a week with nothing planned).
+GroupStatus = Literal["done", "overdue", "in_progress", "not_started", "empty"]
+
+
+class ItemTracking(BaseModel):
+    done: bool
+    status: ItemStatus
+    due: date
+    priority: Priority
+
+
+class WeekTracking(BaseModel):
+    number: int
+    due: date
+    status: GroupStatus
+
+
+class PhaseTracking(BaseModel):
+    number: int
+    status: GroupStatus
+    priority: Priority
+
+
+class NextStep(BaseModel):
+    task_id: str
+    title: str
+    kind: Literal["learn", "practice", "project"]
+    hours: int
+    week: int
+    due: date
+    overdue: bool
+    resource: ResourceLink | None = None
+
+
+class RoadmapTracking(BaseModel):
+    start_date: date
+    today: date
+    current_week: int | None  # 1-26 while the plan runs, else None
+    items: dict[str, ItemTracking]  # by task id ("w3-1") and month milestone id ("m2")
+    weeks: list[WeekTracking]
+    phases: list[PhaseTracking]
+    next_steps: list[NextStep]  # at most 3: overdue first, then this week, then later
+    done_tasks: int
+    total_tasks: int
+    done_hours: int
+    planned_hours: int

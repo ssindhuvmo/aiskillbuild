@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db import Base
@@ -101,6 +101,32 @@ class RoadmapRecord(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
     roadmap: Mapped[dict] = mapped_column(JSON)  # Roadmap
     snapshot: Mapped[dict] = mapped_column(JSON)  # {"approved": ApprovedList, "profile": the five inputs} it was built from
+    # The day week 1 starts; due dates follow from it. Set to the build day, kept on regenerate, user-editable.
+    start_date: Mapped[date | None] = mapped_column(Date)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class RoadmapItemProgress(Base):
+    """A checked roadmap task or month milestone (self-reported). The row exists only while it is checked.
+    The fingerprint (tracking.fingerprints) keeps a check from carrying over to a different task after a
+    regenerate."""
+
+    __tablename__ = "roadmap_item_progress"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(20), primary_key=True)  # "w3-1" or "m2"
+    fingerprint: Mapped[str] = mapped_column(String(200))
+    done_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class ReportRecord(Base):
+    """The user's AI Career Transition Report: only the LLM's two sections are stored; the rest is
+    assembled from saved data when it is read. Stale when the snapshot differs."""
+
+    __tablename__ = "reports"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    narrative: Mapped[dict] = mapped_column(JSON)  # ReportNarrative
+    source: Mapped[str] = mapped_column(String(16))  # ai | default
+    snapshot: Mapped[dict] = mapped_column(JSON)  # gap inputs, approved list and roadmap it was written from
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
 

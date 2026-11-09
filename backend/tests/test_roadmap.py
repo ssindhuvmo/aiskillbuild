@@ -177,7 +177,8 @@ def test_roadmap_goes_stale_when_the_profile_changes(anon, fake_gaps, fake):  # 
 
 def test_markdown_export(anon, fake_gaps, fake):  # noqa: F811
     approved_user(anon, "m7", fake_gaps)
-    roadmap = generate(anon)[1]["roadmap"]
+    state = generate(anon)[1]
+    roadmap, tracking = state["roadmap"], state["tracking"]
     r = anon.get("/api/roadmap/export.md")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/markdown")
     assert "attachment" in r.headers["content-disposition"] and ".md" in r.headers["content-disposition"]
@@ -188,8 +189,11 @@ def test_markdown_export(anon, fake_gaps, fake):  # noqa: F811
         f"{roadmap['total_hours']} of 208 budgeted hours planned",
         "## Phase 1: AI phase 1 (months 1–2)",
         "### Month 1: Theme 1",
-        f"- [ ] {task['title']} ({task['hours']} h) — [{link['title']}]({link['url']})",
-        "**Milestone:** Milestone 6",
+        f"- [ ] {task['title']} ({task['hours']} h, {tracking['items'][task['id']]['priority']} priority)"
+        f" — [{link['title']}]({link['url']})",
+        "- [ ] **Milestone (due ",
+        ":** Milestone 6",
+        "## Immediate next steps",
         "### Portfolio project (phase 3): Fraud model 3",
         "_Nothing planned: catch up or rest._",
     ):

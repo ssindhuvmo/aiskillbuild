@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { downloadRoadmap, generateRoadmap, getRoadmap } from "../api.js";
+import { downloadRoadmap, generateRoadmap, getRoadmap, setRoadmapItem, setStartDate } from "../api.js";
 import Button from "../components/Button.jsx";
 import Card from "../components/Card.jsx";
 import MetricCard from "../components/MetricCard.jsx";
@@ -9,6 +9,7 @@ import PageHeader from "../components/PageHeader.jsx";
 import Progress from "../components/Progress.jsx";
 import ProgressBar from "../components/ProgressBar.jsx";
 import { Milestone, Month, Phase, TaskRow, Week } from "../components/Timeline.jsx";
+import { formatDay } from "../tracking.js";
 
 function progressMessages({ target_role: role, hours_per_week: hours }) {
   return [`Planning your 6 months toward ${role}…`, `Fitting each week into ${hours} hours…`];
@@ -34,7 +35,40 @@ export default function Roadmap() {
   const [error, setError] = useState("");
   const [notices, setNotices] = useState([]);
   const [loadError, setLoadError] = useState("");
+  const [busy, setBusy] = useState(null); // the item id (or "start") being saved
   const autoRan = useRef(false);
+
+  // Shows the tick at once; the server's reply (statuses, next steps) replaces it, or it is put back.
+  async function toggle(id, done) {
+    const before = state;
+    setState((s) => ({
+      ...s,
+      tracking: { ...s.tracking, items: { ...s.tracking.items, [id]: { ...s.tracking.items[id], done } } },
+    }));
+    setBusy(id);
+    setError("");
+    try {
+      setState(await setRoadmapItem(id, done));
+    } catch (e) {
+      setState(before);
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function changeStart(value) {
+    if (!value) return;
+    setBusy("start");
+    setError("");
+    try {
+      setState(await setStartDate(value));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   // The placed plan arrives first; each phase's text follows as it is written. A regenerate keeps the page
   // on screen and reports progress in a banner, because the weeks usually come back unchanged.
@@ -109,18 +143,25 @@ export default function Roadmap() {
   const kinds = hoursByKind(roadmap);
   const free = roadmap.budget_hours - roadmap.total_hours;
   const writing = roadmap.phases.some((p) => p.narrative === "pending") || (lastRun && !lastRun.done);
+  const tracking = state.tracking;
+  const items = tracking.items;
+  const weekTracking = Object.fromEntries(tracking.weeks.map((w) => [w.number, w]));
+  const phaseTracking = Object.fromEntries(tracking.phases.map((p) => [p.number, p]));
+  const download = (format) => downloadRoadmap(format).catch((e) => setError(e.message));
 
   return (
     <>
       <PageHeader
         title="Learning Roadmap"
-        subtitle={`${profile.current_role} → ${profile.target_role} · ${roadmap.weeks} weeks at up to ${roadmap.hours_per_week} hrs/week`}
+        subtitle={`${profile.current_role} → ${profile.target_role} · ${roadmap.weeks} weeks at up to ${roadmap.hours_per_week} hrs/week · started ${formatDay(state.start_date, true)}`}
         actions={
           <>
-            <Button onClick={() => downloadRoadmap().catch((e) => setError(e.message))}>Download Plan</Button>
+            <Button onClick={() => download("md")}>Download Plan</Button>
+            <Button variant="secondary" onClick={() => download("pdf")}>Export PDF</Button>
             <Button variant="secondary" onClick={() => run(true)} disabled={!state.list_approved || writing}>
               {writing ? "Regenerating…" : "Regenerate Roadmap"}
             </Button>
+            <Button variant="secondary" to="/report">View Transition Report</Button>
           </>
         }
       />
@@ -159,7 +200,8 @@ export default function Roadmap() {
       {error && <p className="error" role="alert">{error}</p>}
       {notices.map((n) => <Notice key={n}>{n}</Notice>)}
 
-      <Card title="Where your hours go">
+      <div className="split">
+      <Card title="Where your hours go" className="split-main">
         <ProgressBar
           max={roadmap.budget_hours}
           label={`${kinds.learn} hours learning, ${kinds.practice} practice, ${kinds.project} project, ${free} free, of ${roadmap.budget_hours}`}
@@ -176,10 +218,60 @@ export default function Roadmap() {
           <MetricCard label="Planned" value={`${roadmap.total_hours} h`} />
           <MetricCard label={`Free in your ${roadmap.budget_hours} h budget`} value={`${free} h`} />
         </div>
+        <h3>Your progress</h3>
+        <ProgressBar
+          value={tracking.done_tasks}
+          max={tracking.total_tasks}
+          label={`${tracking.done_tasks} of ${tracking.total_tasks} tasks done`}
+        />
+        <p className="muted">
+          {tracking.done_tasks} of {tracking.total_tasks} tasks done · {tracking.done_hours} of {tracking.planned_hours} hours
+        </p>
       </Card>
 
+      <Card title="Immediate next steps" className="split-side">
+        {tracking.next_steps.length ? (
+          <ol className="next-steps">
+            {tracking.next_steps.map((step) => (
+              <li key={step.task_id}>
+                <span>
+                  {step.title}
+                  {step.resource && (
+                    <>
+                      {" · "}
+                      <a href={step.resource.url} target="_blank" rel="noopener noreferrer">{step.resource.title} ↗</a>
+                    </>
+                  )}
+                </span>
+                <span className={step.overdue ? "next-step-meta overdue" : "next-step-meta"}>
+                  {step.hours} h · {step.overdue ? `overdue since ${formatDay(step.due)}` : `week ${step.week}, due ${formatDay(step.due)}`}
+                </span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>Every task is done. Well done!</p>
+        )}
+        <label className="field">
+          Start date (week 1 begins)
+          <input
+            type="date"
+            value={state.start_date}
+            disabled={busy === "start"}
+            onChange={(e) => changeStart(e.target.value)}
+          />
+        </label>
+      </Card>
+      </div>
+
       {roadmap.phases.map((phase) => (
-        <Phase key={phase.number} title={`Phase ${phase.number}: ${phase.name}`} meta={`months ${phase.months.join("–")}`}>
+        <Phase
+          key={phase.number}
+          title={`Phase ${phase.number}: ${phase.name}`}
+          meta={`months ${phase.months.join("–")}`}
+          status={phaseTracking[phase.number]?.status}
+          priority={phaseTracking[phase.number]?.priority}
+        >
           {NARRATIVE_NOTE[phase.narrative] && (
             <p className="muted" role="status">{NARRATIVE_NOTE[phase.narrative]}</p>
           )}
@@ -207,14 +299,34 @@ export default function Roadmap() {
               defaultOpen={month.number === 1}
             >
               {month.weeks.map((week) => (
-                <Week key={week.number} title={`Week ${week.number} · ${week.focus}`} meta={`${week.hours} h`}>
-                  {week.tasks.map((task, i) => (
-                    <TaskRow key={task.id || i} kind={task.kind} title={task.title} hours={task.hours} link={task.resource} />
-                  ))}
+                <Week key={week.number} title={`Week ${week.number} · ${week.focus}`} meta={`${week.hours} h`} tracking={weekTracking[week.number]}>
+                  {week.tasks.map((task, i) => {
+                    const id = task.id || `w${week.number}-${i + 1}`; // same fallback as tracking.task_id
+                    return (
+                      <TaskRow
+                        key={id}
+                        id={id}
+                        kind={task.kind}
+                        title={task.title}
+                        hours={task.hours}
+                        link={task.resource}
+                        tracking={items[id]}
+                        busy={busy === id}
+                        onToggle={(done) => toggle(id, done)}
+                      />
+                    );
+                  })}
                   {week.tasks.length === 0 && <li className="task muted">Nothing planned: catch up or rest.</li>}
                 </Week>
               ))}
-              <Milestone>{month.milestone}</Milestone>
+              <Milestone
+                id={`m${month.number}`}
+                tracking={items[`m${month.number}`]}
+                busy={busy === `m${month.number}`}
+                onToggle={(done) => toggle(`m${month.number}`, done)}
+              >
+                {month.milestone}
+              </Milestone>
             </Month>
           ))}
         </Phase>

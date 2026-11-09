@@ -257,6 +257,37 @@ input:disabled, select:disabled { opacity: .6; }
 .milestone { display: flex; align-items: flex-start; gap: 12px; background: var(--color-bg); border-radius: var(--radius-control); padding: 14px 16px; }
 .milestone svg { flex: 0 0 auto; margin-top: 3px; color: var(--color-primary); }
 
+/* Tracking (milestone 10): checkboxes, statuses, next steps */
+.phase-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.badge-overdue { border: 1px solid var(--color-danger); color: var(--color-danger); }
+.task { align-items: center; padding: 0; }
+.check-target { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: var(--control-min-height); height: var(--control-min-height); margin-left: -12px; }
+.check-target input { width: 18px; height: 18px; accent-color: var(--color-primary); cursor: pointer; }
+.check-target input:disabled { cursor: progress; }
+.task-body label, .milestone-text { cursor: pointer; }
+.task-done .task-body label, .task-done .milestone-text { color: var(--color-text-muted); text-decoration: line-through; }
+.task-overdue, .next-step-meta.overdue { color: var(--color-danger); }
+.milestone { align-items: center; padding: 6px 16px 6px 12px; }
+.milestone .check-target { margin-left: -8px; }
+.milestone-text { flex: 1 1 auto; min-width: 0; padding: 6px 0; }
+.week-status { font-size: var(--text-small); color: var(--color-text-muted); }
+.week-status.status-done { color: var(--color-success); }
+.week-status.status-in_progress { color: var(--tag-skill-text); }
+.week-status.status-overdue { color: var(--color-danger); }
+.next-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; }
+.next-steps li { overflow-wrap: anywhere; }
+.next-steps li::marker { color: var(--color-accent); font-weight: 600; }
+.next-step-meta { display: block; font-size: var(--text-small); color: var(--color-text-muted); }
+.done-text { color: var(--color-success); }
+
+/* --- Transition Report -------------------------------------------------------------- */
+.report-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; overflow-wrap: anywhere; }
+.report-list.numbered li::marker { color: var(--color-accent); font-weight: 600; }
+.report-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px 24px; }
+.report-fields dd { overflow-wrap: anywhere; }
+.report-phase { border-top: 1px solid var(--color-border); padding-top: 14px; }
+.report-phase:first-of-type { border-top: 0; padding-top: 0; }
+
 /* --- Home ----------------------------------------------------------------------------- */
 .home { min-height: 100vh; display: flex; flex-direction: column; }
 .home-inner { width: 100%; max-width: 1200px; margin: 0 auto; padding-left: 32px; padding-right: 32px; }

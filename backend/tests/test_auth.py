@@ -33,6 +33,13 @@ PROTECTED = [
     ("get", "/api/roadmap", None),
     ("post", "/api/roadmap/generate", None),
     ("get", "/api/roadmap/export.md", None),
+    ("get", "/api/roadmap/export.pdf", None),
+    ("put", "/api/roadmap/start-date", {"start_date": "2026-11-02"}),
+    ("put", "/api/roadmap/items", {"item_id": "w1-1", "done": True}),
+    ("get", "/api/report", None),
+    ("post", "/api/report/generate", None),
+    ("get", "/api/report/export.md", None),
+    ("get", "/api/report/export.pdf", None),
     ("delete", "/api/account/data", None),
 ]
 

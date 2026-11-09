@@ -11,6 +11,7 @@ const NAV = [
   { to: "/gaps", label: "Skill Analysis", icon: "skills" },
   { to: "/resources", label: "Resources", icon: "resources" },
   { to: "/roadmap", label: "Learning Roadmap", icon: "roadmap" },
+  { to: "/report", label: "Transition Report", icon: "report" },
   { to: "/progress", label: "Progress Review", icon: "progress" },
   { to: "/jobs", label: "Job Match", icon: "jobs" },
   { to: "/resume", label: "Resume Optimizer", icon: "resume" },

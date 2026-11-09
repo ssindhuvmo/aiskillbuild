@@ -68,7 +68,7 @@ def test_init_db_stamps_backs_up_and_upgrades(pre_alembic_db):
     with _engine(backup).connect() as conn:  # the backup is the database before migrating
         assert "ai_experience" in [r[1] for r in conn.execute(text("PRAGMA table_info(profiles)"))]
     with dbmod.engine.connect() as conn:
-        assert MigrationContext.configure(conn).get_current_revision() == "0004"
+        assert MigrationContext.configure(conn).get_current_revision() == "0005"
 
 
 def test_init_db_never_overwrites_an_existing_backup(pre_alembic_db):

@@ -3,7 +3,7 @@
 Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full
 specification (v2).
 
-**Current status: Milestone 9 of 14** (see Milestones in `SPEC.md`):
+**Current status: Milestone 10 of 14** (see Milestones in `SPEC.md`):
 1. React + FastAPI skeleton and conversational intake — done
 2. Google sign-in with per-user sessions — done
 3. Skill-gap analysis with user corrections — done
@@ -15,9 +15,11 @@ specification (v2).
    evidence-based skill analysis with a gap chart, Alembic migrations) — built, in testing
 9. Resource sources and preferences (YouTube source, preference- and budget-aware ranking, filters,
    Save / Start / Complete) — built, in testing
+10. Roadmap tracking and Transition Report (start date, due dates, priority, status, checkboxes, immediate
+    next steps, PDF export, the AI Career Transition Report) — built, in testing
 
-The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (task checkboxes and
-dates, PDF export, View Demo) are not built yet. Dashboard,
+The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (View Demo) are not
+built yet. Dashboard,
 Progress Review, Job Match and Resume Optimizer are placeholders in the sidebar.
 
 ## Google sign-in setup (once)
@@ -176,10 +178,21 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
 9. Review the roadmap: three phases, six collapsible months with a theme and a highlighted milestone, weekly
    tasks with links to your approved resources, and a portfolio project per phase from your industry. The
    summary shows planned hours against your budget (weekly hours × 26 weeks); no week goes over your weekly
-   hours. Approved resources that did not fit are listed at the bottom. Click **Download Plan** to export it
-   as Markdown.
-10. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
-    resources, approval and roadmap reload. A different Google account starts empty. Editing the profile marks
+   hours. Approved resources that did not fit are listed at the bottom.
+10. Track your progress: the roadmap starts on the day it was first built; change **Start date** in
+    **Immediate next steps** and every due date moves with it. Tick tasks and month milestones as you finish
+    them: weeks and phases show *Done*, *In progress* or *Overdue*, phases show their priority (from the gaps
+    they cover), and **Immediate next steps** lists the next three tasks, overdue ones first. Ticks are saved
+    per account and survive **Regenerate Roadmap** when the task is still the same (same kind, resource and
+    week). **Download Plan** (Markdown) and **Export PDF** include the dates and ticks.
+11. Open **Transition Report** (sidebar, or **View Transition Report** on the roadmap) and click **Create my
+    report** (10–20 seconds). The AI writes the *Career Fit Assessment* and *Recommended Career Strategy*;
+    the other nine sections come from your saved profile, resume, skills, approved resources and roadmap.
+    If the AI's text isn't available, those two sections show plain text and the page says so. **Download
+    PDF** / **Download Markdown** export it. Changing the profile, skills, resources or regenerating the
+    roadmap marks the report out of date; ticking tasks only updates its next steps.
+12. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
+    resources, approval, roadmap, ticks and report reload. A different Google account starts empty. Editing the profile marks
     everything after it out of date: re-confirm the skills, **Rebuild the list**, approve it again, then
     **Regenerate Roadmap**. Refining the list after approval asks you to approve again, and the new approval
     marks the roadmap out of date. **Start over** also clears the refinement chat.

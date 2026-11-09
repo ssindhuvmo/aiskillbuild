@@ -16,9 +16,11 @@ milestones; `README.md` has setup steps. Build only the current milestone.
     `record_profile` and `suggest_roles` tools; `validation.py` defines the steps, levels and options),
     `resume_parser/` (file checks + text extraction, one structured-output call, plain-Python rules, file
     storage), `gap_analysis/` (one structured-output call), `course_search/` (the LangGraph graph: web and
-    YouTube search, refinement chat, filters, approval) and `scheduler/` (Python placement and hour budget; one structured-output
-    call per phase, for the text only).
-    `llm.py` — Anthropic client and `friendly_error`.
+    YouTube search, refinement chat, filters, approval), `scheduler/` (Python placement and hour budget; one structured-output
+    call per phase, for the text only; `tracking.py` for dates and status) and `report/` (the Transition Report:
+    one structured-output call for two sections, the rest assembled in Python).
+    `llm.py` — Anthropic client and `friendly_error`. `pdf.py` — the fpdf2 `Document` writer for every PDF
+    export, with DejaVu Sans bundled in `core/fonts/` (fpdf2's built-in fonts are Latin-1 only).
   - `knowledge/` — the knowledge base (`store.py`) and the retrieval layer (`retriever.py`).
 - `backend/config/domains.json` — supported domains (edit here, not in code).
 - `backend/data/knowledge_base.json` — curated resources + skill-tag vocabulary (edit here, not in code).
@@ -34,7 +36,8 @@ milestones; `README.md` has setup steps. Build only the current milestone.
 ## Milestones
 Numbered in `SPEC.md`: 1 intake, 2 Google sign-in, 3 skill gaps, 4 knowledge base + ranking, 5 resource approval +
 scheduler + roadmap, 6 live web search + refinement (LangGraph), 7 design system and app shell, 8 expanded
-intake + resume + Career Profile, 9 resource sources and preferences; 10–14 are listed there. Build one at a time and stop for testing after each.
+intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap tracking + Transition Report;
+11–14 are listed there. Build one at a time and stop for testing after each.
 
 ## Orchestration decision: LangGraph for course search only
 - The course search agent and conversational refinement (flow steps 4–5) are one LangGraph graph in
@@ -309,6 +312,35 @@ intake + resume + Career Profile, 9 resource sources and preferences; 10–14 ar
 - Endpoints: `POST /api/resources/filter` (`FilterIn`; 409 without a current list),
   `PUT /api/resources/progress` (`ProgressIn`: `resource_id` plus `saved` and/or `status`).
 
+## Roadmap tracking and Transition Report (Milestone 10)
+- `scheduler/tracking.py` (pure) works out due dates (`due_date` = start + 7·week − 1), status (items:
+  done | overdue | this_week | not_started; weeks and phases: done | overdue | in_progress | not_started | empty),
+  priority (a task's resource priority in the approved list the roadmap was built from, `repository.built_from`;
+  project tasks and milestones take the phase's highest gap priority) and `next_steps` (3 tasks not done,
+  overdue first) on every read: `track` → `RoadmapState.tracking`. Nothing but the start date and the checks
+  is stored, and the LLM never supplies a date or status.
+- `roadmaps.start_date` is set on the first build (`repository.today()`, patched in tests), kept on regenerate,
+  changed via `PUT /api/roadmap/start-date`. Migration 0005 backfilled existing roadmaps from `updated_at`.
+- Checks: `roadmap_item_progress` (one row per checked task id `w<week>-<n>` or milestone `m<month>`, with a
+  `fingerprint` = kind | resource id | week). `done_items` ignores rows whose fingerprint no longer matches, so
+  a check carries over a regenerate only to the same task. `PUT /api/roadmap/items` (`item_id`, `done`; 404
+  without a roadmap, 422 for an id not in it). Checks never change the plan or the resource progress.
+- Exports: `scheduler/export.py` `to_markdown` / `to_pdf` (dates, ticks, next steps); `GET /api/roadmap/export.pdf`.
+- Report (`agents/report/`): `ReportNarrative` (`career_fit`, `strategy`) is all the LLM writes; `agent.write`
+  makes one `messages.parse` call, `check` rejects links and percentages/scores, `MAX_ATTEMPTS` = 2, then
+  `assemble.default_narrative` (plain text from the rationale and phases) with a `notice`; a report is always
+  produced. `assemble.build` makes the 11 sections (SPEC order) from `repository.report_data` when the report
+  is read, so facts, dates and links always match the saved data. `reports` table (one row per user):
+  `narrative`, `source` (ai | default), `snapshot` (gap inputs, analysis, roadmap); `stale` when it differs.
+  Checks don't make it stale. Logged to `agent_outputs` as `report`.
+- Endpoints: `GET /api/report` (`ReportState`: status, `can_generate`, stale, report, notice),
+  `POST /api/report/generate` (blocking, 409 without a current roadmap), `GET /api/report/export.md|pdf`
+  (404 before one exists).
+- Frontend: `Timeline` rows have real checkboxes (44 px `check-target`, label = task text), `Week` shows
+  status and due date, `Phase` status and priority pills; labels in `src/tracking.js`. Roadmap page: start
+  date, Immediate next steps, Export PDF, View Transition Report. `pages/Report.jsx` at `/report` (sidebar
+  "Transition Report").
+
 ## Conventions
 - Secrets live only in `backend/.env`; `frontend/.env` holds only `VITE_GOOGLE_CLIENT_ID`. Both are gitignored;
   keep the `.env.example` files in sync when adding variables.
@@ -338,6 +370,9 @@ intake + resume + Career Profile, 9 resource sources and preferences; 10–14 ar
   fakes the refinement LLM (`graph.get_client`): `messages.create` returns scripted actions, `messages.stream`
   the explanation. Test user ids must be unique across files (one shared in-memory DB).
 - New endpoints need a 401-without-login case in `tests/test_auth.py`.
+- Tracking: `tests/test_roadmap_tracking.py` (pure `track` plus endpoints; its `today` fixture patches
+  `repository.today`). Report: `tests/test_report.py` `report_llm` fixture patches `report.agent.get_client`
+  (valid text by default; pass dicts, exceptions or functions to script replies).
 - The app's lifespan runs the migrations on the in-memory DB. The autouse `uploads` fixture points
   `resume_parser.storage.UPLOAD_DIR` at a temp folder. `tests/resume_files.py` builds DOCX and text PDFs in
   memory; `tests/test_resume_parser.py` has the parser's fake client (`fake`) and a valid reply (`good()`).

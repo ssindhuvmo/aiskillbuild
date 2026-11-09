@@ -9,6 +9,7 @@ const PATHS = {
   progress: "M4 12l5 5L20 6",
   jobs: "M3 8h18v12H3zM9 8V5h6v3",
   resume: "M6 3h9l4 4v14H6zM9 12h7M9 16h7",
+  report: "M5 3h14v18H5zM9 8h6M9 12h6M9 16h3",
   fileDone: "M6 3h9l4 4v14H6zM9 14l2.5 2.5L16 12",
   person: "M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21c0-4 4-6 8-6s8 2 8 6",
   menu: "M4 7h16M4 12h16M4 17h16",

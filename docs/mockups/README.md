@@ -51,7 +51,8 @@ user's resume, and projects the user hasn't done yet are listed separately, not 
 
 ## Not covered yet
 
-- The AI Career Transition Report view (SPEC.md section 8). The Dashboard's "View Transition Report" button
-  leads to it; design it in milestone 10 using the same card and type styles.
+- The AI Career Transition Report view (SPEC.md section 8) has no mockup. It was built in milestone 10 at
+  `/report` (sidebar item "Transition Report") with the same card and type styles; the Dashboard's "View
+  Transition Report" button will link to it.
 - Sign-in, loading, error and empty states. Use the existing progress messages and error handling, restyled
   with these tokens.

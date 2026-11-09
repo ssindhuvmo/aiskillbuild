@@ -9,6 +9,7 @@ from core.agents.course_search.graph import get_graph
 from core.db import Base
 from core.models import Resume
 from tests.test_resources import fake_gaps  # noqa: F401  (fixture)
+from tests.test_report import report_llm  # noqa: F401  (fixture)
 from tests.test_roadmap import approved_user, fake, generate  # noqa: F401  (fixture)
 
 
@@ -23,10 +24,12 @@ def row_counts(sub):
 
 
 def full_user(client, sub, fake_gaps, fake):  # noqa: F811
-    """Signed in with data in every table: profile, chat, gaps, resources, approval and roadmap."""
+    """Signed in with data in every table: profile, chat, gaps, resources, approval, roadmap, checks and report."""
     ids = approved_user(client, sub, fake_gaps)
     generate(client)
     assert client.put("/api/resources/progress", json={"resource_id": ids[0], "saved": True}).status_code == 200
+    assert client.put("/api/roadmap/items", json={"item_id": "m1", "done": True}).status_code == 200
+    assert client.post("/api/report/generate").status_code == 200
     with dbmod.SessionLocal() as db:
         repository.append_message(db, sub, "user", "hello")
         # The resume row directly (tests/test_resume_api.py covers uploads and their files).
@@ -38,7 +41,7 @@ def full_user(client, sub, fake_gaps, fake):  # noqa: F811
     return client
 
 
-def test_start_over_deletes_all_of_the_users_data(anon, fake_gaps, fake):  # noqa: F811
+def test_start_over_deletes_all_of_the_users_data(anon, fake_gaps, fake, report_llm):  # noqa: F811
     full_user(anon, "s1", fake_gaps, fake)
     assert anon.delete("/api/account/data").json() == {"ok": True}
 
@@ -58,7 +61,7 @@ def test_start_over_deletes_all_of_the_users_data(anon, fake_gaps, fake):  # noq
     assert get_graph().get_state({"configurable": {"thread_id": "s1"}}).values == {}
 
 
-def test_start_over_leaves_other_users_untouched(anon, fake_gaps, fake):  # noqa: F811
+def test_start_over_leaves_other_users_untouched(anon, fake_gaps, fake, report_llm):  # noqa: F811
     full_user(anon, "s2", fake_gaps, fake)
     with TestClient(app, base_url="https://testserver") as other:
         full_user(other, "s3", fake_gaps, fake)

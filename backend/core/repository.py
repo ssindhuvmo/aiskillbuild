@@ -1,5 +1,5 @@
 """All database access lives here so routes stay free of business logic."""
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -10,13 +10,15 @@ from core.agents.intake.validation import (
     validate_field,
 )
 from core.agents.gap_analysis.schemas import Correction, GapAnalysis
+from core.agents.report.assemble import ReportData
 from core.agents.resume_parser.rules import years_of_experience
 from core.agents.resume_parser.schemas import ResumeData, ResumeDraft
+from core.agents.scheduler import tracking
 from core.agents.scheduler.schemas import Roadmap
 from core.knowledge.schemas import Candidate, Resource, SearchProfile
 from core.models import (
-    AgentOutput, ApprovedListRecord, Conversation, GapAnalysisRecord, Profile, ResourceListRecord, ResourceProgress,
-    Resume, RoadmapRecord, User, WebResourceCandidate, WebSearchCache, _now,
+    AgentOutput, ApprovedListRecord, Conversation, GapAnalysisRecord, Profile, ReportRecord, ResourceListRecord,
+    ResourceProgress, Resume, RoadmapItemProgress, RoadmapRecord, User, WebResourceCandidate, WebSearchCache, _now,
 )
 from core.schemas import (
     ChatMessage, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceProgressOut, ResourceState, ResumeState,
@@ -52,8 +54,8 @@ def delete_user_data(db: Session, user_id: str) -> None:
     """Start over: delete everything saved for this user. The user row stays, so the sign-in
     keeps working. Any new table with a user_id must be added here."""
     for model in (
-        RoadmapRecord, ApprovedListRecord, ResourceListRecord, ResourceProgress, GapAnalysisRecord, AgentOutput,
-        Conversation, Resume, Profile,
+        ReportRecord, RoadmapItemProgress, RoadmapRecord, ApprovedListRecord, ResourceListRecord, ResourceProgress,
+        GapAnalysisRecord, AgentOutput, Conversation, Resume, Profile,
     ):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     db.commit()
@@ -605,13 +607,70 @@ def get_roadmap_state(db: Session, user_id: str) -> RoadmapState:
     record = db.get(RoadmapRecord, user_id)
     if record is None:
         return RoadmapState(status="none", profile=profile, list_approved=approved is not None)
+    roadmap = Roadmap.model_validate(record.roadmap)
+    if record.start_date is None:  # a roadmap from before migration 0005's backfill: fix its start once
+        record.start_date = record.updated_at.date()
+        db.commit()
+    start = record.start_date
     return RoadmapState(
         status="ready",
         profile=profile,
         list_approved=approved is not None,
-        roadmap=Roadmap.model_validate(record.roadmap),
+        roadmap=roadmap,
         stale=approved is None or record.snapshot != roadmap_snapshot(profile, approved),
+        start_date=start,
+        tracking=tracking.track(roadmap, built_from(record), start, done_items(db, user_id, roadmap), today()),
     )
+
+
+def today() -> date:
+    """The date tracking is worked out for (tests patch it)."""
+    return date.today()
+
+
+def built_from(record: RoadmapRecord) -> ApprovedList | None:
+    """The approved list a roadmap was built from (its priorities), even when the current approval changed."""
+    try:
+        return ApprovedList.model_validate(record.snapshot["approved"])
+    except (KeyError, TypeError, ValidationError):
+        return None
+
+
+def done_items(db: Session, user_id: str, roadmap: Roadmap) -> set[str]:
+    """The checked tasks and milestones that still match this roadmap (same id and fingerprint)."""
+    current = tracking.fingerprints(roadmap)
+    rows = db.query(RoadmapItemProgress).filter_by(user_id=user_id).all()
+    return {r.item_id for r in rows if current.get(r.item_id) == r.fingerprint}
+
+
+def set_start_date(db: Session, user_id: str, start: date) -> RoadmapState:
+    record = db.get(RoadmapRecord, user_id)
+    if record is None:
+        raise NotReady("Build your roadmap first.")
+    record.start_date = start
+    db.commit()
+    return get_roadmap_state(db, user_id)
+
+
+def set_item_done(db: Session, user_id: str, item_id: str, done: bool) -> RoadmapState:
+    """Check or uncheck one roadmap task or month milestone. A row exists only while it is checked."""
+    record = db.get(RoadmapRecord, user_id)
+    if record is None:
+        raise NotReady("Build your roadmap first.")
+    fingerprint = tracking.fingerprints(Roadmap.model_validate(record.roadmap)).get(item_id)
+    if fingerprint is None:
+        raise ValidationFailed({"item_id": "That task is not in your roadmap. Reload the page."})
+    row = db.get(RoadmapItemProgress, (user_id, item_id))
+    if done:
+        if row is None:
+            row = RoadmapItemProgress(user_id=user_id, item_id=item_id)
+            db.add(row)
+        if row.fingerprint != fingerprint:
+            row.fingerprint, row.done_at = fingerprint, _now()
+    elif row is not None:
+        db.delete(row)
+    db.commit()
+    return get_roadmap_state(db, user_id)
 
 
 def save_roadmap(db: Session, user_id: str, roadmap: Roadmap, snapshot: dict, log: bool = True) -> RoadmapState:
@@ -622,6 +681,8 @@ def save_roadmap(db: Session, user_id: str, roadmap: Roadmap, snapshot: dict, lo
     if record is None:
         record = RoadmapRecord(user_id=user_id)
         db.add(record)
+    if record.start_date is None:  # a regenerate keeps the user's start date
+        record.start_date = today()
     record.roadmap = data
     record.snapshot = snapshot
     if log:
@@ -642,3 +703,49 @@ def update_roadmap(db: Session, user_id: str, roadmap: Roadmap, log_snapshot: di
         db.add(AgentOutput(user_id=user_id, agent="scheduler", output={"input": log_snapshot, "roadmap": data}))
     db.commit()
     return get_roadmap_state(db, user_id)
+
+
+# --- Transition Report ----------------------------------------------------------------
+
+
+def report_data(db: Session, user_id: str) -> ReportData | None:
+    """What the report is built from, or None without a roadmap and a valid gap analysis."""
+    record = db.get(RoadmapRecord, user_id)
+    gap_state = get_gap_state(db, user_id)
+    if record is None or gap_state.analysis is None:
+        return None
+    state = get_roadmap_state(db, user_id)
+    resume = reviewed_resume(db, user_id)
+    return ReportData(
+        profile=state.profile,
+        analysis=gap_state.analysis,
+        resume=ResumeData.model_validate(resume) if resume else None,
+        approved=built_from(record),
+        roadmap=state.roadmap,
+        tracking=state.tracking,
+    )
+
+
+def report_snapshot(db: Session, user_id: str, data: ReportData) -> dict:
+    """What the report's text depends on; it is stale when this changes. Checking tasks doesn't change it."""
+    return {
+        "inputs": gap_inputs(db, user_id, data.profile),
+        "analysis": data.analysis.model_dump(mode="json"),
+        "roadmap": data.roadmap.model_dump(mode="json"),
+    }
+
+
+def get_report_record(db: Session, user_id: str) -> ReportRecord | None:
+    return db.get(ReportRecord, user_id)
+
+
+def save_report(db: Session, user_id: str, narrative: dict, source: str, snapshot: dict) -> ReportRecord:
+    record = db.get(ReportRecord, user_id)
+    if record is None:
+        record = ReportRecord(user_id=user_id)
+        db.add(record)
+    record.narrative, record.source, record.snapshot = narrative, source, snapshot
+    record.updated_at = _now()
+    db.add(AgentOutput(user_id=user_id, agent="report", output={"source": source, "narrative": narrative}))
+    db.commit()
+    return record

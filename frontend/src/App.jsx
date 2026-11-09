@@ -8,6 +8,7 @@ import ComingSoon from "./pages/ComingSoon.jsx";
 import Home from "./pages/Home.jsx";
 import Intake from "./pages/Intake.jsx";
 import Resources from "./pages/Resources.jsx";
+import Report from "./pages/Report.jsx";
 import Roadmap from "./pages/Roadmap.jsx";
 import SkillGaps from "./pages/SkillGaps.jsx";
 import { ProfileContext } from "./profileContext.js";
@@ -121,6 +122,7 @@ export default function App() {
           <Route path="/gaps" element={<SkillGaps />} />
           <Route path="/resources" element={<Resources />} />
           <Route path="/roadmap" element={<Roadmap />} />
+          <Route path="/report" element={<Report />} />
           <Route path="/dashboard" element={<ComingSoon title="Dashboard" subtitle="Your readiness, skill coverage and roadmap progress at a glance." milestone={11} />} />
           <Route path="/progress" element={<ComingSoon title="Progress Review" subtitle="Report what you finished and refresh your plan." milestone={11} />} />
           <Route path="/jobs" element={<ComingSoon title="Job Match" subtitle="Roles that fit the skills you have built." milestone={12} />} />

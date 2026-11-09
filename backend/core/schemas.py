@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from core.agents.course_search.schemas import Preferences, ResourceList, TypeGroup
 from core.agents.gap_analysis.schemas import BudgetSuggestion, Correction, GapAnalysis
 from core.agents.resume_parser.schemas import ResumeData
-from core.agents.scheduler.schemas import Roadmap
+from core.agents.scheduler.schemas import Roadmap, RoadmapTracking
 from core.knowledge.schemas import Level, Resource
 
 
@@ -171,3 +171,14 @@ class RoadmapState(BaseModel):
     list_approved: bool = False  # a roadmap needs an approved, up-to-date resource list
     roadmap: Roadmap | None = None
     stale: bool = False  # the approved list or profile changed since this roadmap was built
+    start_date: date | None = None  # the day week 1 starts
+    tracking: RoadmapTracking | None = None  # due dates, priority, status and next steps (tracking.track)
+
+
+class StartDateIn(BaseModel):
+    start_date: date
+
+
+class RoadmapItemIn(BaseModel):
+    item_id: str = Field(min_length=1, max_length=20)  # a task id ("w3-1") or a month milestone ("m2")
+    done: bool

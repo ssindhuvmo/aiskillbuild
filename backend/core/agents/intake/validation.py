@@ -24,6 +24,8 @@ PREFERENCES = {
 DEFAULT_PREFERENCES = ["free_courses", "video", "articles", "projects"]
 BUDGETS = ["free_only", "monthly"]
 CONSTRAINT_FLAGS = ["weekends_only", "keep_current_job", "remote_only"]
+# Labels for the report (mirrored in frontend/src/capabilities.js).
+CONSTRAINT_LABELS = {"weekends_only": "Weekends only", "keep_current_job": "Must stay in current job", "remote_only": "Remote only"}
 MAX_MONTHLY_BUDGET = 100_000
 MAX_CONTEXT = 2000
 
