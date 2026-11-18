@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.agents.course_search.schemas import Preferences, ResourceList, TypeGroup
 from core.agents.gap_analysis.schemas import BudgetSuggestion, Correction, GapAnalysis
@@ -188,6 +188,34 @@ class RoadmapItemIn(BaseModel):
 class DashboardState(BaseModel):
     status: Literal["none", "ready"]  # none: run the skill-gap analysis first
     dashboard: Dashboard | None = None
+
+
+FeedbackArea = Literal[
+    "intake", "skill_analysis", "resources", "roadmap", "report", "dashboard", "progress", "job_match", "other",
+]
+MAX_FEEDBACK = 2000
+
+
+class FeedbackIn(BaseModel):
+    """The feedback form. Only the message is required; no areas = the whole platform.
+    frontend/src/pages/Feedback.jsx mirrors the areas."""
+
+    rating: int | None = Field(default=None, ge=1, le=5)
+    areas: list[FeedbackArea] = Field(default=[], max_length=len(FeedbackArea.__args__))
+    message: str = Field(min_length=1, max_length=MAX_FEEDBACK)
+
+    @field_validator("message")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Write a message before sending.")
+        return v
+
+    @field_validator("areas")
+    @classmethod
+    def unique(cls, v: list[str]) -> list[str]:
+        return list(dict.fromkeys(v))
 
 
 class ProgressState(BaseModel):

@@ -52,7 +52,8 @@ class Dashboard(BaseModel):
     completion: int  # 0-100, roadmap hours done
     done_hours: int
     planned_hours: int
-    jobs_applied: int | None = None  # Job Match (milestone 12)
+    jobs_applied: int = 0  # jobs marked as applied on Job Match (self-reported)
+    jobs_saved: int = 0
     summary: CareerSummary
     radar: list[RadarPoint]
     history: list[TrendPoint]

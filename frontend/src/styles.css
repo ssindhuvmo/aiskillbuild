@@ -338,3 +338,15 @@ input:disabled, select:disabled { opacity: .6; }
 .check-row input { width: 18px; height: 18px; min-height: 0; padding: 0; accent-color: var(--color-primary); cursor: pointer; }
 .check-row .muted { margin-left: auto; }
 input[type="range"] { min-height: var(--control-min-height); padding: 0; border: 0; background: transparent; accent-color: var(--color-primary); cursor: pointer; }
+
+/* Job Match (milestone 12) */
+.filter-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; }
+.filter-row .field { flex: 1 1 200px; }
+.link-button { min-height: var(--control-min-height); padding: 0; background: none; border: 0; color: var(--color-accent); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.link-button:hover { color: var(--color-accent-hover); }
+.link-button[aria-pressed="true"] { color: var(--color-text-strong); text-decoration: underline; }
+.score { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.score .bar { flex: 1 1 auto; }
+.job-detail { display: flex; flex-direction: column; gap: 18px; position: sticky; top: 16px; }
+.job-detail p { margin: 0; overflow-wrap: anywhere; }
+.feedback-form { max-width: 720px; }

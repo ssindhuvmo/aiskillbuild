@@ -34,6 +34,8 @@ class ProgressData:
     notes: str
     history: list[tuple[date, int]] = field(default_factory=list)  # recorded scores, oldest first
     today: date = field(default_factory=date.today)
+    jobs_applied: int = 0  # Job Match marks
+    jobs_saved: int = 0
 
 
 def current(data: ProgressData) -> Readiness:
@@ -128,6 +130,8 @@ def dashboard(data: ProgressData) -> Dashboard:
         completion=readiness.completion(t.done_hours, t.planned_hours) if t else 0,
         done_hours=t.done_hours if t else 0,
         planned_hours=t.planned_hours if t else 0,
+        jobs_applied=data.jobs_applied,
+        jobs_saved=data.jobs_saved,
         summary=_summary(data),
         radar=[RadarPoint(skill=g.skill, today=round(g.level_today, 2), target=g.level_target) for g in now.gaps],
         history=history,

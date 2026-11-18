@@ -15,7 +15,8 @@ milestones; `README.md` has setup steps. Build only the current milestone.
   - `agents/<name>/` — one module per agent with its own `prompt.md`: `intake/` (streaming chat with
     `record_profile` and `suggest_roles` tools; `validation.py` defines the steps, levels and options),
     `resume_parser/` (file checks + text extraction, one structured-output call, plain-Python rules, file
-    storage), `gap_analysis/` (one structured-output call), `course_search/` (the LangGraph graph: web and
+    storage), `gap_analysis/` (one structured-output call), `job_search/` (Job Match: `JobSource` + skill mapping),
+    `course_search/` (the LangGraph graph: web and
     YouTube search, refinement chat, filters, approval), `scheduler/` (Python placement and hour budget; one structured-output
     call per phase, for the text only; `tracking.py` for dates and status) and `report/` (the Transition Report:
     one structured-output call for two sections, the rest assembled in Python).
@@ -28,6 +29,7 @@ milestones; `README.md` has setup steps. Build only the current milestone.
 - `backend/data/knowledge_base.json` — curated resources + skill-tag vocabulary (edit here, not in code).
 - `backend/data/youtube_channels.json` — trusted YouTube channels by channel id (edit here, not in code).
 - `backend/scripts/check_kb_links.py` — live check of every knowledge-base URL (network; not in pytest).
+  `scripts/list_feedback.py` prints the feedback form's messages.
   `scripts/check_youtube_channels.py` checks the trusted channel ids against the real YouTube API.
 - `backend/alembic.ini`, `backend/migrations/` — Alembic (`versions/0001_baseline` = the milestone-7 schema).
 - `backend/uploads/<user id>/` — uploaded resumes (`UPLOAD_DIR`; gitignored, never served).
@@ -39,7 +41,7 @@ milestones; `README.md` has setup steps. Build only the current milestone.
 Numbered in `SPEC.md`: 1 intake, 2 Google sign-in, 3 skill gaps, 4 knowledge base + ranking, 5 resource approval +
 scheduler + roadmap, 6 live web search + refinement (LangGraph), 7 design system and app shell, 8 expanded
 intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap tracking + Transition Report,
-11 Dashboard + Progress Review; 12–14 are listed there. Build one at a time and stop for testing after each.
+11 Dashboard + Progress Review, 12 Job Match; 13–14 are listed there. Build one at a time and stop for testing after each.
 
 ## Orchestration decision: LangGraph for course search only
 - The course search agent and conversational refinement (flow steps 4–5) are one LangGraph graph in
@@ -376,6 +378,45 @@ intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap
   `pages/ProgressReview.jsx`, `components/Charts.jsx` (`SkillRadar`, `ReadinessTrend`; Recharts can't use CSS
   variables, so `tokens()` reads them at render), `components/NextSteps.jsx` (shared with Roadmap). The radar
   axes are the plan gaps (fewer than 3 → a plain list); Jobs Applied is a placeholder until milestone 12.
+
+## Job Match (Milestone 12)
+- `job_search/source.py`: `JobSource` protocol, `get_job_source()` is the swap point (a jobs API later).
+  `AnthropicJobSource`: one call with the basic `web_search_20250305` tool, `allowed_domains` = `JOB_SITES`
+  (`core/config.py`, env `JOB_SITES`; subdomains included, an optional path narrows a site), `max_uses`
+  `MAX_SEARCHES` (3), and a `record_jobs` client tool. `to_findings` keeps a `JobFinding` only if Pydantic
+  accepts it, its URL is in that reply's search results and `on_allowed_site`; at most `MAX_JOBS` (10).
+  LinkedIn is deliberately not in the default list (SPEC §10).
+- `agent.run_for_user` (blocking, one run per user via a lock): search → `verify.get_checker()` per link
+  (`fail` dropped, `blocked` kept as `Job.link = "blocked"`) → `assess` → `repository.save_job_search`
+  (logged as `job_search`). `assess` = one `messages.parse(output_format=Assessments)` mapping each required
+  skill to `have` (one of `matching.user_skills`: strengths, completed plan gaps, capability areas rated
+  Intermediate+) or `in_plan` (a plan gap not completed), plus the explanation; `matching.check` accepts only
+  names from those lists, each required skill once, no links / percentages; `MAX_ATTEMPTS` 2, then
+  `fallback_matches` (name-only) with a notice. A source error → `SearchFailed` (503); no analysis → 409.
+- Numbers are Python: `matching.view` computes score = covered / required on every read (a mapping to a
+  plan gap counts once that gap is completed on Progress Review), the missing skills with the roadmap phase
+  of their gap, and `parse_salary` turns the stated salary into annual `salary_min/max` (hourly → none).
+- Tables (migration 0007): `job_searches` (one row per user: `query`, `jobs`, `notice`, `found_at`),
+  `job_marks` (user, job id: `saved`, `applied`, `applied_at`, the `Job` so it survives a refresh; a row with
+  neither is deleted). Both in `delete_user_data`. `JobState.kept` lists marked jobs not in the current
+  results. The Dashboard's `jobs_applied` / `jobs_saved` count `job_marks`.
+- Endpoints: `GET /api/jobs` (`JobState`), `POST /api/jobs/search` (`JobQuery`: location, remote, hybrid),
+  `PUT /api/jobs/marks` (`JobMarkIn`; 422 for a job neither in the results nor marked).
+- Frontend: `pages/JobMatch.jsx` (filters: Remote / Hybrid chips and Location are the search query, Salary
+  filters the saved results client-side from `salary_min/max`; table with a match bar; detail panel with
+  Apply link, Mark as applied, Save Job, Update Resume → `/resume`).
+- Tests: `conftest.py`'s `searcher` fixture also fakes job search (`searcher.jobs.results`: JobFinding dicts
+  or an exception) and the assessment LLM (`searcher.job_llm.replies`; default `assess_nothing`, a valid
+  mapping that covers nothing). `tests/test_jobs.py` has `finding(n)` and `mapped(have=..., in_plan=...)`.
+
+## Feedback (added with milestone 12)
+- `Feedback` table (migrations 0008 + 0009; many rows per user: `rating` 1–5 or None, `areas` = a JSON list of
+  `FeedbackArea` ([] = the whole platform; 0009 moved the old single `area` into it), `message`, `created_at`).
+  `POST /api/feedback` (`FeedbackIn` in `core/schemas.py`: `areas` de-duplicated in order, message stripped, 1–`MAX_FEEDBACK`
+  (2000) characters, else 422) → `repository.save_feedback`. `pages/Feedback.jsx` mirrors the areas and limit.
+- "Start over" does not delete feedback: `delete_user_data` sets its `user_id` to None (so `test_account`'s
+  "no rows left for the user" still holds). No admin UI: `scripts/list_feedback.py` (`--days N`, `--json`).
+- Tests: `tests/test_feedback.py`.
 
 ## Conventions
 - Secrets live only in `backend/.env`; `frontend/.env` holds only `VITE_GOOGLE_CLIENT_ID`. Both are gitignored;

@@ -81,7 +81,10 @@ export default function Dashboard() {
           <MetricCard large label="Roadmap Completion" value={`${d.completion}%`}
             detail={hasRoadmap ? `${d.done_hours} of ${d.planned_hours} planned hours` : "No roadmap yet"} />
         </Card>
-        <Card as="div"><MetricCard large label="Jobs Applied" value="—" detail="Job Match comes next" /></Card>
+        <Card as="div">
+          <MetricCard large label="Jobs Applied" value={d.jobs_applied}
+            detail={d.jobs_saved ? `${d.jobs_saved} saved` : <Link to="/jobs">Find matching jobs</Link>} />
+        </Card>
       </div>
 
       <div className="split">

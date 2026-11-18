@@ -152,6 +152,45 @@ class ReadinessHistory(Base):
     completion: Mapped[int] = mapped_column(Integer)  # roadmap completion, 0-100
 
 
+class JobSearchRecord(Base):
+    """The user's latest Job Match results (every search is also logged in agent_outputs). Postings expire,
+    so the page shows found_at and has Refresh, which repeats `query`."""
+
+    __tablename__ = "job_searches"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    query: Mapped[dict] = mapped_column(JSON)  # JobQuery
+    jobs: Mapped[list] = mapped_column(JSON)  # list[Job]
+    notice: Mapped[str | None] = mapped_column(Text)
+    found_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class JobMark(Base):
+    """Save Job / Mark as applied on one posting (self-reported). Kept when the results are refreshed, so it
+    carries the job itself; a row with nothing set is deleted."""
+
+    __tablename__ = "job_marks"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    job: Mapped[dict] = mapped_column(JSON)  # Job as it was when last marked
+    saved: Mapped[bool] = mapped_column(Boolean, default=False)
+    applied: Mapped[bool] = mapped_column(Boolean, default=False)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class Feedback(Base):
+    """A message from the feedback form (many per user). "Start over" sets user_id to None instead of deleting
+    the row, so the feedback stays but no longer points to anyone. Read with scripts/list_feedback.py."""
+
+    __tablename__ = "feedback"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"), index=True)
+    rating: Mapped[int | None] = mapped_column(Integer)  # 1-5, None = not rated
+    areas: Mapped[list] = mapped_column(JSON, default=list)  # schemas.FeedbackArea values, [] = the whole platform
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class ReportRecord(Base):
     """The user's AI Career Transition Report: only the LLM's two sections are stored; the rest is
     assembled from saved data when it is read. Stale when the snapshot differs."""

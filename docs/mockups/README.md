@@ -55,6 +55,8 @@ user's resume, and projects the user hasn't done yet are listed separately, not 
   `/report` (sidebar item "Transition Report") with the same card and type styles; the Dashboard's "View
   Transition Report" button links to it (milestone 11).
 - The Dashboard radar shows the plan's skill gaps rather than the five capability areas (only gaps have a
-  saved target level), and Jobs Applied shows a placeholder until Job Match (milestone 12).
+  saved target level). Jobs Applied counts the jobs marked as applied on Job Match (milestone 12).
+- Job Match: work mode and location are search inputs; the detail panel sits beside the table on desktop
+  and below it on a phone. Update Resume opens the Resume Optimizer, which arrives in milestone 13.
 - Sign-in, loading, error and empty states. Use the existing progress messages and error handling, restyled
   with these tokens.

@@ -73,7 +73,7 @@ def test_dashboard_numbers(anon, fake_gaps, fake, today):  # noqa: F811
 
     assert d["done_hours"] == first["hours"] and d["planned_hours"] == state["tracking"]["planned_hours"]
     assert d["completion"] == round(100 * d["done_hours"] / d["planned_hours"])
-    assert d["jobs_applied"] is None and (d["covered"], d["needed"]) == (2, 4)
+    assert d["jobs_applied"] == 0 and d["jobs_saved"] == 0 and (d["covered"], d["needed"]) == (2, 4)
     assert [p["skill"] for p in d["radar"]] == ["Deep learning", "PCI-DSS"]
     assert all(p["target"] == 3 and 1 <= p["today"] < 3 for p in d["radar"])
     assert len(d["planned"]) == 27 and d["planned"][0] <= d["readiness"] <= d["planned"][-1]

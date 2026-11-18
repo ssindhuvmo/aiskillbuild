@@ -45,6 +45,10 @@ PROTECTED = [
     ("post", "/api/dashboard/readiness", None),
     ("get", "/api/progress", None),
     ("put", "/api/progress", {"skills": [], "notes": ""}),
+    ("get", "/api/jobs", None),
+    ("post", "/api/jobs/search", {"location": "", "remote": True}),
+    ("put", "/api/jobs/marks", {"job_id": "job-x", "saved": True}),
+    ("post", "/api/feedback", {"message": "hi"}),
     ("delete", "/api/account/data", None),
 ]
 

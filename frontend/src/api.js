@@ -163,3 +163,11 @@ export function refreshRoadmap({ onState, onError }) {
     else if (evt.type === "error") onError(evt.message);
   }, onError);
 }
+
+// Job Match (milestone 12). Scores, salaries and links all come from the backend.
+export const getJobs = () => request("/api/jobs");
+export const searchJobs = (query) => request("/api/jobs/search", json("POST", query));
+export const markJob = (job_id, change) => request("/api/jobs/marks", json("PUT", { job_id, ...change }));
+
+// Feedback form: { rating (1-5 or null), areas ([] = the whole platform), message }.
+export const sendFeedback = (feedback) => request("/api/feedback", json("POST", feedback));

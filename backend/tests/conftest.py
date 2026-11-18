@@ -1,5 +1,7 @@
 """Test setup: fixed auth config, an in-memory DB, and a fake Google verifier (no network)."""
+import json
 import os
+import re
 
 # Set before core.config / core.db are imported; these override backend/.env.
 os.environ["DATABASE_URL"] = "sqlite://"
@@ -7,6 +9,8 @@ os.environ["GOOGLE_CLIENT_ID"] = "test-client-id"
 os.environ["SESSION_SECRET"] = "test-session-secret"
 os.environ["SESSION_COOKIE_SECURE"] = "true"
 os.environ["CHECKPOINT_DB"] = ":memory:"  # the course search graph's checkpoints
+
+from types import SimpleNamespace  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -22,6 +26,8 @@ dbmod.SessionLocal.configure(bind=dbmod.engine)
 from app.main import app  # noqa: E402
 from core import auth  # noqa: E402
 from core.agents.course_search import verify, web, youtube  # noqa: E402
+from core.agents.job_search import agent as job_agent, source as job_source  # noqa: E402
+from core.agents.job_search.schemas import Assessments, JobFinding  # noqa: E402
 from core.agents.resume_parser import storage  # noqa: E402
 from core.models import WebResourceCandidate, WebSearchCache  # noqa: E402
 
@@ -57,6 +63,49 @@ class FakeYouTube:
         return list(found)
 
 
+class FakeJobSource:
+    """Stands in for job search: returns `results` (JobFinding dicts, or an exception) and records each query."""
+
+    def __init__(self):
+        self.results = []
+        self.calls = []
+
+    def search(self, query, seeker):
+        self.calls.append((query, seeker))
+        if isinstance(self.results, Exception):
+            raise self.results
+        return [JobFinding.model_validate(r) for r in self.results]
+
+
+def assess_nothing(text):
+    """A valid assessment that maps no skill: every job's required skills are left uncovered."""
+    postings = json.loads(re.search(r"<postings>\n(.*)\n</postings>", text, re.S).group(1))
+    return {"jobs": [{"job_id": p["job_id"], "explanation": "A fair fit for your background.",
+                      "matches": [{"required": r} for r in p["required_skills"]]} for p in postings]}
+
+
+class FakeJobLLM:
+    """messages.parse for the job assessment: scripted replies (dicts, exceptions or functions of the request
+    text); by default every call returns assess_nothing."""
+
+    def __init__(self):
+        self.replies = []
+        self.requests = []
+        self.messages = SimpleNamespace(parse=self._parse)
+
+    def _parse(self, **kw):
+        text = kw["messages"][0]["content"]
+        self.requests.append(text)
+        reply = self.replies.pop(0) if self.replies else assess_nothing
+        if isinstance(reply, Exception):
+            raise reply
+        if callable(reply):
+            reply = reply(text)
+            if isinstance(reply, Exception):
+                raise reply
+        return SimpleNamespace(parsed_output=Assessments.model_validate(reply))
+
+
 def fake_verify(credential: str) -> dict:
     """Accepts tokens shaped "good:<sub>"; anything else is rejected like a bad signature."""
     if not credential.startswith("good:"):
@@ -80,13 +129,18 @@ def _fake_google(monkeypatch):
 def searcher(monkeypatch):
     """No network: web search finds nothing unless a test fills `searcher.results`, YouTube nothing unless
     a test fills `searcher.youtube.results`, and every link checks out unless a test sets
-    `searcher.link_status[url]`."""
+    `searcher.link_status[url]`. Job search returns `searcher.jobs.results`, and the job assessment LLM
+    answers with `searcher.job_llm.replies` (by default a mapping that covers nothing)."""
     fake = FakeSearcher()
     fake.link_status = {}
     fake.youtube = FakeYouTube()
     monkeypatch.setattr(web, "get_searcher", lambda: fake)
     monkeypatch.setattr(youtube, "get_youtube", lambda: fake.youtube)
     monkeypatch.setattr(verify, "get_checker", lambda: lambda url: (fake.link_status.get(url, "ok"), "fake"))
+    fake.jobs = FakeJobSource()
+    fake.job_llm = FakeJobLLM()
+    monkeypatch.setattr(job_source, "get_job_source", lambda: fake.jobs)
+    monkeypatch.setattr(job_agent, "get_client", lambda: fake.job_llm)
     return fake
 
 

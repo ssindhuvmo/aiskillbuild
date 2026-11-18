@@ -15,6 +15,7 @@ const NAV = [
   { to: "/progress", label: "Progress Review", icon: "progress" },
   { to: "/jobs", label: "Job Match", icon: "jobs" },
   { to: "/resume", label: "Resume Optimizer", icon: "resume" },
+  { to: "/feedback", label: "Feedback", icon: "feedback" },
 ];
 
 export default function Sidebar({ user, profile, onStartOver, onSignOut }) {

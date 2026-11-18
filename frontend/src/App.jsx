@@ -6,7 +6,9 @@ import { loadGis } from "./components/GoogleSignIn.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import ComingSoon from "./pages/ComingSoon.jsx";
 import Home from "./pages/Home.jsx";
+import Feedback from "./pages/Feedback.jsx";
 import Intake from "./pages/Intake.jsx";
+import JobMatch from "./pages/JobMatch.jsx";
 import ProgressReview from "./pages/ProgressReview.jsx";
 import Resources from "./pages/Resources.jsx";
 import Report from "./pages/Report.jsx";
@@ -129,7 +131,8 @@ export default function App() {
           <Route path="/report" element={<Report />} />
           <Route path="/dashboard" element={<Suspense fallback={<p>Loading…</p>}><Dashboard /></Suspense>} />
           <Route path="/progress" element={<ProgressReview />} />
-          <Route path="/jobs" element={<ComingSoon title="Job Match" subtitle="Roles that fit the skills you have built." milestone={12} />} />
+          <Route path="/jobs" element={<JobMatch />} />
+          <Route path="/feedback" element={<Feedback />} />
           <Route path="/resume" element={<ComingSoon title="Resume Optimizer" subtitle="Your resume, tailored to one job." milestone={13} />} />
           <Route path="*" element={<Navigate to="/intake" replace />} />
         </Route>

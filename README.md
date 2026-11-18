@@ -3,7 +3,7 @@
 Helps tech professionals move into AI roles with a personalized 6-month roadmap. See `SPEC.md` for the full
 specification (v2).
 
-**Current status: Milestones 1–11 of 14 done** (see Milestones in `SPEC.md`):
+**Current status: Milestones 1–11 of 14 done, 12 built** (see Milestones in `SPEC.md`):
 1. React + FastAPI skeleton and conversational intake — done
 2. Google sign-in with per-user sessions — done
 3. Skill-gap analysis with user corrections — done
@@ -21,7 +21,9 @@ specification (v2).
     charts, completed skills, confidence ratings, notes, refreshing the remaining weeks) — done
 
 The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (View Demo, Jobs
-Applied) are not built yet. Job Match and Resume Optimizer are placeholders in the sidebar.
+Applied) are not built yet. Resume Optimizer is a placeholder in the sidebar.
+12. Job Match (live search of an allowlist of job sites, verified links, match score, Save / Apply) — built,
+    in testing
 
 ## Google sign-in setup (once)
 
@@ -125,6 +127,19 @@ are in `backend/data/youtube_channels.json`; after editing it, check the ids aga
 python scripts/check_youtube_channels.py     # from backend/, venv active; uses the real YouTube API
 ```
 
+### Feedback
+
+Users send feedback from the **Feedback** page in the sidebar (optional 1–5 rating, any number of
+screens it is about, required message).
+To read it, newest first, with the average rating and counts per area:
+
+```powershell
+python scripts/list_feedback.py              # from backend/, venv active
+python scripts/list_feedback.py --days 7     # only the last week; --json for JSON
+```
+
+Messages stay after a user's **Start over**; they are then shown as "(anonymous)".
+
 ## Frontend
 
 ```powershell
@@ -201,7 +216,16 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
 13. Open **Dashboard**: Readiness Score (with the change over the last week), Skill Coverage, Roadmap
     Completion, the career summary with this week's next steps, the skill radar (today against target for each
     gap in the plan), the readiness trend against the planned line, and each phase's completion.
-14. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
+14. Open **Job Match**. Pick **Remote** and/or **Hybrid**, type a city or country (or leave it empty) and
+    click **Find jobs** (30–60 seconds). Postings come only from the sites in `JOB_SITES`
+    (`backend/.env`; default Greenhouse, Lever, Ashby, Workable, Wellfound and Indeed). Each link is checked;
+    Indeed often blocks the check, so its jobs say *link not checked*. Click a title to see the summary, the
+    required skills you have, the missing ones (with the roadmap phase that covers them) and why it fits.
+    **Apply** opens the posting in a new tab; nothing is submitted for you, so click **Mark as applied**.
+    **Save Job** keeps a job across refreshes, and the Dashboard's **Jobs Applied** counts them. The
+    **Salary range** filter uses the salary the posting states. Mark a skill complete on Progress Review and
+    the match scores rise without searching again.
+15. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
     resources, approval, roadmap, ticks and report reload. A different Google account starts empty. Editing the profile marks
     everything after it out of date: re-confirm the skills, **Rebuild the list**, approve it again, then
     **Regenerate Roadmap**. Refining the list after approval asks you to approve again, and the new approval
@@ -213,6 +237,11 @@ If the AI's text for a phase fails (no API key, an API error, or a reply that fa
 phase keeps plain default text and the page says so; the backend log has the reason
 (`Scheduler narrative for phase N ...`). Each run logs its timing at INFO: `Roadmap generated: plan placed in
 X s; phase N ai|default T s, ...; total T s`.
+
+**Match score** (`backend/core/agents/job_search/matching.py`): the share of a job's required skills you
+have. The AI maps each required skill to one of your skills or plan gaps (only names from your own lists
+are accepted); a skill counts as covered when it maps to a skill you have, or to a plan gap you marked
+complete.
 
 **How the scores are calculated** (Python, `backend/core/progress/readiness.py`; the AI never supplies a
 number). For each gap in the plan: the starting credit is its current level over its target level (None 0,

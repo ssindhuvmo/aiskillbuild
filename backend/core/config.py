@@ -22,6 +22,10 @@ CHECKPOINT_DB = os.getenv("CHECKPOINT_DB", str(BACKEND_DIR / "graph_checkpoints.
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(BACKEND_DIR / "uploads"))
 # YouTube Data API v3 key for the YouTube resource source; empty = YouTube is skipped.
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+# Job Match: the only sites job search may use (comma-separated hostnames; subdomains included, an optional
+# path narrows a site). LinkedIn is deliberately not searched (SPEC: no LinkedIn scraping).
+DEFAULT_JOB_SITES = "boards.greenhouse.io,jobs.lever.co,jobs.ashbyhq.com,apply.workable.com,wellfound.com,indeed.com"
+JOB_SITES = [s.strip() for s in os.getenv("JOB_SITES", DEFAULT_JOB_SITES).split(",") if s.strip()]
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")

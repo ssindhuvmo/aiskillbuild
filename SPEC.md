@@ -72,7 +72,7 @@ One design system, defined once as CSS variables and reused by every page.
 ### Navigation
 
 A left sidebar with: Home, Intake, Dashboard, Skill Analysis, Learning Roadmap,
-Resources, Progress Review, Job Match, Resume Optimizer. Pages that need an earlier
+Resources, Progress Review, Job Match, Resume Optimizer, Feedback. Pages that need an earlier
 step show a short note with a link to that step. A persistent profile summary sits
 in the sidebar: name, current role, target role.
 
@@ -282,6 +282,25 @@ For returning users:
 - Results are saved per user with the date found; postings expire, so the page
   shows that date and has a Refresh button.
 
+How it is built (milestone 12):
+- `JOB_SITES` default: boards.greenhouse.io, jobs.lever.co, jobs.ashbyhq.com,
+  apply.workable.com, wellfound.com and indeed.com (web search `allowed_domains`,
+  subdomains included). LinkedIn stays out: no open API, its terms forbid automated
+  access, and its pages fail the link check. Indeed usually blocks link checks
+  (403), so its postings are kept and labelled "link not checked", like blocked
+  resources.
+- Location and Remote / Hybrid are search inputs (no profile field); the "remote
+  only" constraint pre-selects Remote. Salary filters the saved results; the
+  amounts are parsed in Python from the salary the posting states.
+- Matching: one structured-output call maps each required skill to one of the
+  user's skills (strengths, completed plan gaps, capability areas rated
+  Intermediate or above) or to a plan gap, and writes the explanation. Python
+  accepts only names from those lists (one retry; then a name-only match with a
+  notice) and computes score = covered / required on every read, so completing a
+  plan gap on Progress Review raises it without a new search.
+- Save Job and Mark as applied are kept per user across refreshes; Jobs Applied on
+  the Dashboard counts them. Update Resume opens the Resume Optimizer (milestone 13).
+
 ### 11. Resume Optimizer (BR-27)
 - Input: the user's resume (uploaded, or built from the profile if none) and one
   selected job.
@@ -295,6 +314,17 @@ For returning users:
   this" and is not placed in the resume. Python checks that every employer, title
   and date in the output exists in the source.
 - Actions: Download PDF, Download DOCX, Copy Content.
+
+### 12. Feedback
+- A free feedback form for signed-in users, so they can say how the platform is
+  working for them: an optional 1–5 rating (Poor to Excellent), optional areas
+  (any number of the pages, or something else; none = the whole platform) and a
+  required message of up to 2,000
+  characters. Every message is kept; a user can send as many as they like.
+- Feedback is about the platform, not the user's plan: **Start over** keeps the
+  messages but removes the link to the user. The page says so.
+- There are no admin accounts: the owner reads feedback with
+  `scripts/list_feedback.py` (newest first, average rating, counts per area).
 
 ## Agents
 
@@ -367,7 +397,8 @@ LangGraph remains limited to flows with a real pause-for-user loop.
     due dates, checkboxes, no padding, immediate next steps, the report, PDF export. — done
 11. **Dashboard and Progress Review** (BR-22 to BR-25). Metrics and charts,
     progress updates, gap reassessment, replanning of remaining weeks. — done
-12. **Job Match** (BR-26).
+12. **Job Match** (BR-26). — done. Also added: the Feedback page
+    (Pages §12). — done
 13. **Resume Optimizer** (BR-27).
 14. **Polish.** Accessibility and mobile pass, View Demo account, performance
     check, full README and demo walkthrough.

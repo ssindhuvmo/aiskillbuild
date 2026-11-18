@@ -19,14 +19,18 @@ from core.agents.scheduler import tracking
 from core.agents.scheduler.schemas import Roadmap
 from core.knowledge.schemas import Candidate, Resource, SearchProfile
 from core.models import (
-    AgentOutput, ApprovedListRecord, Conversation, GapAnalysisRecord, Profile, ProgressNotes, ReadinessHistory,
+    AgentOutput, ApprovedListRecord, Conversation, Feedback, GapAnalysisRecord, JobMark, JobSearchRecord, Profile,
+    ProgressNotes, ReadinessHistory,
     ReportRecord, ResourceListRecord, ResourceProgress, Resume, RoadmapItemProgress, RoadmapRecord, SkillProgress, User,
     WebResourceCandidate, WebSearchCache, _now,
 )
 from core.progress import assemble, readiness
 from core.progress.schemas import ProgressReviewIn
+from core.agents.job_search import matching, source
+from core.agents.job_search.schemas import Job, JobQuery, JobState
+from core.config import JOB_SITES
 from core.schemas import (
-    ChatMessage, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceProgressOut, ResourceState, ResumeState,
+    ChatMessage, FeedbackIn, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceProgressOut, ResourceState, ResumeState,
     RoadmapState, RoleSuggestion,
 )
 
@@ -64,8 +68,16 @@ def delete_user_data(db: Session, user_id: str) -> None:
     for model in (
         ReportRecord, RoadmapItemProgress, RoadmapRecord, ApprovedListRecord, ResourceListRecord, ResourceProgress,
         GapAnalysisRecord, AgentOutput, Conversation, Resume, Profile, SkillProgress, ProgressNotes, ReadinessHistory,
+        JobSearchRecord, JobMark,
     ):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
+    # Feedback is about the platform, not the user's plan: keep the message, drop the link to the user.
+    db.query(Feedback).filter_by(user_id=user_id).update({"user_id": None}, synchronize_session=False)
+    db.commit()
+
+
+def save_feedback(db: Session, user_id: str, data: FeedbackIn) -> None:
+    db.add(Feedback(user_id=user_id, rating=data.rating, areas=data.areas, message=data.message))
     db.commit()
 
 
@@ -804,6 +816,8 @@ def progress_data(db: Session, user_id: str) -> assemble.ProgressData | None:
         notes=notes.notes if notes else "",
         history=[(h.day, h.score) for h in history],
         today=today(),
+        jobs_applied=db.query(JobMark).filter_by(user_id=user_id, applied=True).count(),
+        jobs_saved=db.query(JobMark).filter_by(user_id=user_id, saved=True).count(),
     )
 
 
@@ -876,3 +890,110 @@ def refresh_inputs(db: Session, user_id: str) -> RefreshInputs | None:
         completed_gaps={g.skill for g in data.analysis.gaps
                         if data.marks.get(readiness.norm(g.skill), readiness.SkillMark()).completed},
     )
+
+
+# --- Job Match (milestone 12) ---------------------------------------------------------
+
+
+@dataclass
+class JobInputs:
+    seeker: "source.Seeker"
+    skills: list[str]  # what the user has today (matching.user_skills)
+    plan: list[str]  # plan gaps not completed yet
+
+
+def _completed_gaps(db: Session, user_id: str, analysis: GapAnalysis) -> list[str]:
+    marks = _marks(db, user_id)
+    return [g.skill for g in analysis.gaps if marks.get(readiness.norm(g.skill), readiness.SkillMark()).completed]
+
+
+def job_inputs(db: Session, user_id: str) -> JobInputs | None:
+    """What a job search and its skill matching use; None without a gap analysis."""
+    gap_state = get_gap_state(db, user_id)
+    if gap_state.analysis is None:
+        return None
+    profile, analysis = gap_state.profile, gap_state.analysis
+    completed = _completed_gaps(db, user_id, analysis)
+    skills = matching.user_skills([x.skill for x in analysis.strengths], completed, profile.capabilities)
+    db.commit()
+    return JobInputs(
+        seeker=source.Seeker(profile.current_role or "", profile.target_role or "", profile.years_experience,
+                             profile.domain or "", skills),
+        skills=skills,
+        plan=[g.skill for g in analysis.gaps if g.skill not in completed],
+    )
+
+
+def save_job_search(db: Session, user_id: str, query: JobQuery, jobs: list[Job], notice: str | None) -> None:
+    data = [j.model_dump(mode="json") for j in jobs]
+    record = db.get(JobSearchRecord, user_id)
+    if record is None:
+        record = JobSearchRecord(user_id=user_id)
+        db.add(record)
+    record.query, record.jobs, record.notice, record.found_at = query.model_dump(), data, notice, _now()
+    db.add(AgentOutput(user_id=user_id, agent="job_search",
+                       output={"query": record.query, "jobs": data, "notice": notice}))
+    db.commit()
+
+
+def _job_context(db: Session, user_id: str) -> tuple[set[str], dict[str, int]]:
+    """Completed plan gaps (normalized) and the roadmap phase that studies each gap, for the scores."""
+    gap_state = get_gap_state(db, user_id)
+    completed = {readiness.norm(g) for g in _completed_gaps(db, user_id, gap_state.analysis)} if gap_state.analysis else set()
+    record = db.get(RoadmapRecord, user_id)
+    phases: dict[str, int] = {}
+    if record is not None:
+        for phase in Roadmap.model_validate(record.roadmap).phases:
+            for gap in phase.gaps:
+                phases.setdefault(readiness.norm(gap), phase.number)
+    return completed, phases
+
+
+def get_job_state(db: Session, user_id: str) -> JobState:
+    can_search = get_gap_state(db, user_id).analysis is not None
+    record = db.get(JobSearchRecord, user_id)
+    marks = {m.job_id: m for m in db.query(JobMark).filter_by(user_id=user_id).all()}
+    profile = get_profile(db, user_id)
+    remote_only = bool((profile.constraints or {}).get("remote_only"))
+    common = {"can_search": can_search, "sites": JOB_SITES}
+    completed, phases = _job_context(db, user_id)
+
+    def view(job: Job):
+        m = marks.get(job.id)
+        return matching.view(job, completed, phases, saved=bool(m and m.saved), applied=bool(m and m.applied),
+                             applied_at=m.applied_at if m else None)
+
+    current = [Job.model_validate(j) for j in record.jobs] if record else []
+    shown = {j.id for j in current}
+    kept = [view(Job.model_validate(m.job)) for m in marks.values() if m.job_id not in shown]
+    if record is None:
+        return JobState(status="none", query=JobQuery(remote=remote_only), kept=kept, **common)
+    return JobState(
+        status="ready", query=JobQuery.model_validate(record.query), found_at=record.found_at, notice=record.notice,
+        jobs=sorted((view(j) for j in current), key=lambda v: -v.score), kept=kept, **common,
+    )
+
+
+def set_job_mark(db: Session, user_id: str, job_id: str, saved: bool | None, applied: bool | None) -> None:
+    """Save Job / Mark as applied. The job comes from the user's own results (or the existing mark), never
+    the browser."""
+    record = db.get(JobSearchRecord, user_id)
+    row = db.get(JobMark, (user_id, job_id))
+    job = next((j for j in (record.jobs if record else []) if j["id"] == job_id), None) or (row.job if row else None)
+    if job is None:
+        raise ValidationFailed({"job_id": "That job is not in your results. Reload the page."})
+    if row is None:
+        row = JobMark(user_id=user_id, job_id=job_id, saved=False, applied=False)
+        db.add(row)
+    row.job = job
+    if saved is not None:
+        row.saved = saved
+    if applied is not None and applied != row.applied:
+        row.applied, row.applied_at = applied, (_now() if applied else None)
+    row.updated_at = _now()
+    if not row.saved and not row.applied:
+        if row in db.new:
+            db.expunge(row)
+        else:
+            db.delete(row)
+    db.commit()
