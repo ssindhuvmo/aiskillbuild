@@ -170,4 +170,15 @@ export const searchJobs = (query) => request("/api/jobs/search", json("POST", qu
 export const markJob = (job_id, change) => request("/api/jobs/marks", json("PUT", { job_id, ...change }));
 
 // Feedback form: { rating (1-5 or null), areas ([] = the whole platform), message }.
+// Resume Optimizer (milestone 13): one tailored version per job; the job id is never a user id.
+const optimizerPath = (jobId) => `/api/resume-optimizer/${encodeURIComponent(jobId)}`;
+export const getOptimizer = () => request("/api/resume-optimizer");
+export const getTailored = (jobId) => request(optimizerPath(jobId));
+export const optimizeResume = (jobId) => request(optimizerPath(jobId), json("POST"));
+export const saveTailoredEdits = (jobId, edits) => request(optimizerPath(jobId), json("PUT", edits));
+export const resetTailoredEdits = (jobId) => request(`${optimizerPath(jobId)}/edits`, { method: "DELETE" });
+// format: "pdf" | "docx"
+export const downloadTailored = (jobId, format, filename) =>
+  download(`${optimizerPath(jobId)}/export.${format}`, `${filename}.${format}`);
+
 export const sendFeedback = (feedback) => request("/api/feedback", json("POST", feedback));

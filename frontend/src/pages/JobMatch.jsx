@@ -90,7 +90,7 @@ function JobDetail({ view, busy, onMark }) {
         <FilterChip pressed={view.saved} disabled={busy} onClick={() => onMark(job.id, { saved: !view.saved })}>
           {view.saved ? "Saved ✓" : "Save Job"}
         </FilterChip>
-        <Button variant="secondary" to="/resume">Update Resume</Button>
+        <Button variant="secondary" to={`/resume?job=${encodeURIComponent(job.id)}`}>Update Resume</Button>
       </div>
       <p className="muted">
         Apply opens the posting in a new tab. Nothing is submitted for you; mark it as applied yourself.

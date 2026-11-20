@@ -28,6 +28,8 @@ from core import auth  # noqa: E402
 from core.agents.course_search import verify, web, youtube  # noqa: E402
 from core.agents.job_search import agent as job_agent, source as job_source  # noqa: E402
 from core.agents.job_search.schemas import Assessments, JobFinding  # noqa: E402
+from core.agents.resume_optimizer import agent as optimizer_agent  # noqa: E402
+from core.agents.resume_optimizer.schemas import TailoredText  # noqa: E402
 from core.agents.resume_parser import storage  # noqa: E402
 from core.models import WebResourceCandidate, WebSearchCache  # noqa: E402
 
@@ -104,6 +106,51 @@ class FakeJobLLM:
             if isinstance(reply, Exception):
                 raise reply
         return SimpleNamespace(parsed_output=Assessments.model_validate(reply))
+
+
+def facts_of(text):
+    """The <facts> JSON of a resume optimizer request."""
+    return json.loads(re.search(r"<facts>\n(.*)\n</facts>", text, re.S).group(1))
+
+
+def tailor_plainly(text):
+    """A valid TailoredText: every role with its own highlights, the first allowed skills, every completed
+    project and course, nothing to add."""
+    f = facts_of(text)
+    return {
+        "headline": f["current_role"] or "Professional", "summary": f"Moving into a {f['target_role']} role.",
+        "roles": [{"ref": r["ref"], "highlights": r["highlights"]} for r in f["resume"]["roles"]],
+        "skills": f["allowed_skills"][:10],
+        "projects": [{"ref": p["id"], "bullets": p["deliverables"][:4]} for p in f["completed_projects"][:3]],
+        "courses": [c["id"] for c in f["completed_courses"]], "keywords": [], "to_add": [],
+    }
+
+
+class FakeResumeLLM:
+    """messages.parse for the resume optimizer: scripted replies (dicts, exceptions or functions of the
+    request text); by default tailor_plainly."""
+
+    def __init__(self):
+        self.replies = []
+        self.requests = []
+        self.messages = SimpleNamespace(parse=self._parse)
+
+    def _parse(self, **kw):
+        text = kw["messages"][0]["content"]
+        self.requests.append(text)
+        reply = self.replies.pop(0) if self.replies else tailor_plainly
+        if callable(reply) and not isinstance(reply, Exception):
+            reply = reply(text)
+        if isinstance(reply, Exception):
+            raise reply
+        return SimpleNamespace(parsed_output=TailoredText.model_validate(reply))
+
+
+@pytest.fixture(autouse=True)
+def resume_llm(monkeypatch):
+    fake = FakeResumeLLM()
+    monkeypatch.setattr(optimizer_agent, "get_client", lambda: fake)
+    return fake
 
 
 def fake_verify(credential: str) -> dict:

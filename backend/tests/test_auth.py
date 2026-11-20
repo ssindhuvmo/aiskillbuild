@@ -48,6 +48,13 @@ PROTECTED = [
     ("get", "/api/jobs", None),
     ("post", "/api/jobs/search", {"location": "", "remote": True}),
     ("put", "/api/jobs/marks", {"job_id": "job-x", "saved": True}),
+    ("get", "/api/resume-optimizer", None),
+    ("get", "/api/resume-optimizer/job-x", None),
+    ("post", "/api/resume-optimizer/job-x", None),
+    ("put", "/api/resume-optimizer/job-x", {"headline": "x", "summary": "y"}),
+    ("delete", "/api/resume-optimizer/job-x/edits", None),
+    ("get", "/api/resume-optimizer/job-x/export.pdf", None),
+    ("get", "/api/resume-optimizer/job-x/export.docx", None),
     ("post", "/api/feedback", {"message": "hi"}),
     ("delete", "/api/account/data", None),
 ]

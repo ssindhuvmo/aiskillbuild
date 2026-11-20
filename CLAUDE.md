@@ -15,7 +15,8 @@ milestones; `README.md` has setup steps. Build only the current milestone.
   - `agents/<name>/` — one module per agent with its own `prompt.md`: `intake/` (streaming chat with
     `record_profile` and `suggest_roles` tools; `validation.py` defines the steps, levels and options),
     `resume_parser/` (file checks + text extraction, one structured-output call, plain-Python rules, file
-    storage), `gap_analysis/` (one structured-output call), `job_search/` (Job Match: `JobSource` + skill mapping),
+    storage), `gap_analysis/` (one structured-output call), `job_search/` (Job Match: `JobSource` + skill mapping), `resume_optimizer/` (evidence, one
+    structured-output call by reference, `rules.check`, documents and PDF / DOCX exports),
     `course_search/` (the LangGraph graph: web and
     YouTube search, refinement chat, filters, approval), `scheduler/` (Python placement and hour budget; one structured-output
     call per phase, for the text only; `tracking.py` for dates and status) and `report/` (the Transition Report:
@@ -41,7 +42,7 @@ milestones; `README.md` has setup steps. Build only the current milestone.
 Numbered in `SPEC.md`: 1 intake, 2 Google sign-in, 3 skill gaps, 4 knowledge base + ranking, 5 resource approval +
 scheduler + roadmap, 6 live web search + refinement (LangGraph), 7 design system and app shell, 8 expanded
 intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap tracking + Transition Report,
-11 Dashboard + Progress Review, 12 Job Match; 13–14 are listed there. Build one at a time and stop for testing after each.
+11 Dashboard + Progress Review, 12 Job Match, 13 Resume Optimizer; 14 is listed there. Build one at a time and stop for testing after each.
 
 ## Orchestration decision: LangGraph for course search only
 - The course search agent and conversational refinement (flow steps 4–5) are one LangGraph graph in
@@ -417,6 +418,35 @@ intake + resume + Career Profile, 9 resource sources and preferences, 10 roadmap
 - "Start over" does not delete feedback: `delete_user_data` sets its `user_id` to None (so `test_account`'s
   "no rows left for the user" still holds). No admin UI: `scripts/list_feedback.py` (`--days N`, `--json`).
 - Tests: `tests/test_feedback.py`.
+
+## Resume Optimizer (Milestone 13)
+- `resume_optimizer/evidence.py` (pure) builds `Evidence` from `repository.optimizer_evidence`: the reviewed
+  resume (empty `ResumeData` + `has_resume=False` without one), `skills` it may list (resume skills, strengths
+  with source resume/user, completed plan gaps, `matching.capability_skills`), completed `projects` (`p<phase>`,
+  every project task in the phase's months checked), completed `courses` (`resource_progress` completed, or all
+  learn/practice tasks of an approved resource checked), `pending_gaps` and `pending_projects`.
+- `TailoredText` is all the model writes: headline, summary, `roles` by `ref` (index into `resume.roles`), skills,
+  `projects` / `courses` by id, `keywords`, `to_add` (skill | project | detail). `rules.check`: every role once,
+  refs from Evidence, skills in `Evidence.skills`, no links, no naming the job's company, every number outside
+  `[...]` already in the user's data (`source_numbers`), keywords in both the posting and the text, `to_add`
+  naming only pending items. `MAX_ATTEMPTS` = 2, then `assemble.default_text` with a notice (also on LLM errors).
+- `assemble.py` (pure): `tailored` / `original` → `ResumeDoc` (employers, titles, dates, education and
+  certifications copied from the resume), `marked` = word-level `difflib` segments for highlights,
+  `with_edits`, `to_text` (Copy Content). `export.py`: `to_pdf` (`core/pdf.Document`), `to_docx` (python-docx).
+- `tailored_resumes` (migration 0010; one row per user and job: `job`, `snapshot` = the Evidence, `text`,
+  `edits`, `source`, `notice`); in `delete_user_data`. `stale` = snapshot ≠ current Evidence. A new run replaces
+  text and clears edits; logged to `agent_outputs` as `resume_optimizer`. `repository.find_job` looks in the
+  search results, job marks and tailored rows (never the browser).
+- Edits (`EditsIn`): headline, summary, highlights per role, bullets per project, skills; the shape must match
+  the saved text and no links (422). The user is the source of their own numbers, so edits skip the number check.
+- Endpoints: `GET /api/resume-optimizer` (`OptimizerState`: jobs from results, kept marks and saved versions),
+  `GET|POST|PUT /api/resume-optimizer/{job_id}` (`OptimizerView`; 404 before a version, 409 without an analysis
+  or while running, 422 unknown job), `DELETE .../{job_id}/edits`, `GET .../{job_id}/export.pdf|docx`.
+- Frontend: `pages/ResumeOptimizer.jsx` at `/resume` (`?job=<id>`, from Job Match's Update Resume): side-by-side
+  `ResumeView`s with `<mark class="added">`, `EditForm`, Suggestions (keywords, To add, Skill improvements).
+- Tests: `tests/test_resume_optimizer.py`; `conftest.py`'s autouse `resume_llm` fakes the model
+  (`resume_llm.replies`: dicts, exceptions or functions of the request; default `tailor_plainly`; `facts_of`
+  reads a request's facts).
 
 ## Conventions
 - Secrets live only in `backend/.env`; `frontend/.env` holds only `VITE_GOOGLE_CLIENT_ID`. Both are gitignored;

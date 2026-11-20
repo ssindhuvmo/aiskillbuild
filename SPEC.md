@@ -315,6 +315,27 @@ How it is built (milestone 12):
   and date in the output exists in the source.
 - Actions: Download PDF, Download DOCX, Copy Content.
 
+How it is built (milestone 13):
+- What the resume may claim grows with the roadmap: the reviewed resume, skills
+  confirmed by the resume or the user (not "assumed" ones), plan gaps marked
+  completed, capability areas rated Intermediate or above, a phase's portfolio
+  project once all its project tasks are checked, and courses marked Complete (or
+  whose roadmap tasks are all checked). Unfinished plan gaps and projects can only
+  appear under "To add once you have done this".
+- The model writes the headline, summary, highlights and project bullets, and
+  picks skills, projects and courses by reference. Employers, titles, dates,
+  education and certifications are copied in Python. Python rejects a skill the
+  user can't claim, an unknown reference, a link, naming the job's company, and
+  any number not already in the user's data (the model writes a "[placeholder]"
+  for the user to fill in instead). One retry; then the resume as it is plus the
+  completed work, with a notice, so a version is always produced.
+- One saved version per job. The user can edit the wording (not employers, titles
+  or dates) before exporting; optimizing again replaces the edits. A version is
+  marked out of date when the user's progress or resume changes.
+- Highlights (added or reworded words) are worked out in Python by comparing each
+  line with the current resume.
+- No resume uploaded: the version has no work history and the page asks for one.
+
 ### 12. Feedback
 - A free feedback form for signed-in users, so they can say how the platform is
   working for them: an optional 1–5 rating (Poor to Excellent), optional areas
@@ -399,7 +420,7 @@ LangGraph remains limited to flows with a real pause-for-user loop.
     progress updates, gap reassessment, replanning of remaining weeks. — done
 12. **Job Match** (BR-26). — done. Also added: the Feedback page
     (Pages §12). — done
-13. **Resume Optimizer** (BR-27).
+13. **Resume Optimizer** (BR-27). — built, in testing
 14. **Polish.** Accessibility and mobile pass, View Demo account, performance
     check, full README and demo walkthrough.
 

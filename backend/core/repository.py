@@ -21,13 +21,16 @@ from core.knowledge.schemas import Candidate, Resource, SearchProfile
 from core.models import (
     AgentOutput, ApprovedListRecord, Conversation, Feedback, GapAnalysisRecord, JobMark, JobSearchRecord, Profile,
     ProgressNotes, ReadinessHistory,
-    ReportRecord, ResourceListRecord, ResourceProgress, Resume, RoadmapItemProgress, RoadmapRecord, SkillProgress, User,
+    ReportRecord, ResourceListRecord, ResourceProgress, Resume, RoadmapItemProgress, RoadmapRecord, SkillProgress,
+    TailoredResumeRecord, User,
     WebResourceCandidate, WebSearchCache, _now,
 )
 from core.progress import assemble, readiness
 from core.progress.schemas import ProgressReviewIn
 from core.agents.job_search import matching, source
-from core.agents.job_search.schemas import Job, JobQuery, JobState
+from core.agents.job_search.schemas import Job, JobQuery, JobState, JobView
+from core.agents.resume_optimizer import evidence as optimizer_evidence_
+from core.agents.resume_optimizer.schemas import Evidence
 from core.config import JOB_SITES
 from core.schemas import (
     ChatMessage, FeedbackIn, GapState, IntakeState, ProfileOut, ProfileUpdate, ResourceProgressOut, ResourceState, ResumeState,
@@ -68,7 +71,7 @@ def delete_user_data(db: Session, user_id: str) -> None:
     for model in (
         ReportRecord, RoadmapItemProgress, RoadmapRecord, ApprovedListRecord, ResourceListRecord, ResourceProgress,
         GapAnalysisRecord, AgentOutput, Conversation, Resume, Profile, SkillProgress, ProgressNotes, ReadinessHistory,
-        JobSearchRecord, JobMark,
+        JobSearchRecord, JobMark, TailoredResumeRecord,
     ):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     # Feedback is about the platform, not the user's plan: keep the message, drop the link to the user.
@@ -996,4 +999,86 @@ def set_job_mark(db: Session, user_id: str, job_id: str, saved: bool | None, app
             db.expunge(row)
         else:
             db.delete(row)
+    db.commit()
+
+
+# --- Resume Optimizer (milestone 13) --------------------------------------------------
+
+
+def optimizer_evidence(db: Session, user_id: str) -> Evidence | None:
+    """What the user can claim on a resume today; None without a gap analysis."""
+    gap_state = get_gap_state(db, user_id)
+    if gap_state.analysis is None:
+        return None
+    profile, analysis = gap_state.profile, gap_state.analysis
+    user = db.get(User, user_id)
+    resume = reviewed_resume(db, user_id)
+    record = db.get(RoadmapRecord, user_id)
+    roadmap = Roadmap.model_validate(record.roadmap) if record is not None else None
+    completed = {
+        r.resource_id: Resource.model_validate(r.resource)
+        for r in db.query(ResourceProgress).filter_by(user_id=user_id, status="completed").all()
+    }
+    return optimizer_evidence_.build(
+        name=(user.name if user else None) or profile.current_role or "Your name",
+        email=user.email if user else None,
+        current_role=profile.current_role or "", target_role=profile.target_role or "",
+        years=profile.years_experience,
+        resume=ResumeData.model_validate(resume) if resume else None,
+        analysis=analysis,
+        completed_gaps=_completed_gaps(db, user_id, analysis),
+        capabilities=profile.capabilities or {},
+        roadmap=roadmap,
+        approved=built_from(record) if record is not None else get_approved_list(db, user_id),
+        done=done_items(db, user_id, roadmap) if roadmap else set(),
+        completed_resources=completed,
+    )
+
+
+def find_job(db: Session, user_id: str, job_id: str) -> Job | None:
+    """A job from the user's own results, marks or tailored resumes (never from the browser)."""
+    record = db.get(JobSearchRecord, user_id)
+    for j in record.jobs if record else []:
+        if j["id"] == job_id:
+            return Job.model_validate(j)
+    for row in (db.get(JobMark, (user_id, job_id)), db.get(TailoredResumeRecord, (user_id, job_id))):
+        if row is not None:
+            return Job.model_validate(row.job)
+    return None
+
+
+def job_view(db: Session, user_id: str, job: Job) -> JobView:
+    """The job's score and missing skills with today's progress (as on Job Match)."""
+    completed, phases = _job_context(db, user_id)
+    return matching.view(job, completed, phases)
+
+
+def tailored_records(db: Session, user_id: str) -> list[TailoredResumeRecord]:
+    return (db.query(TailoredResumeRecord).filter_by(user_id=user_id)
+            .order_by(TailoredResumeRecord.updated_at.desc()).all())
+
+
+def get_tailored(db: Session, user_id: str, job_id: str) -> TailoredResumeRecord | None:
+    return db.get(TailoredResumeRecord, (user_id, job_id))
+
+
+def save_tailored(db: Session, user_id: str, job: Job, snapshot: dict, text: dict, source: str,
+                  notice: str | None) -> None:
+    """Save a new tailored version for this job (replacing the previous one and its edits) and log it."""
+    row = db.get(TailoredResumeRecord, (user_id, job.id))
+    if row is None:
+        row = TailoredResumeRecord(user_id=user_id, job_id=job.id)
+        db.add(row)
+    row.job, row.snapshot, row.text = job.model_dump(mode="json"), snapshot, text
+    row.edits, row.source, row.notice, row.updated_at = None, source, notice, _now()
+    db.add(AgentOutput(user_id=user_id, agent="resume_optimizer",
+                       output={"job_id": job.id, "text": text, "source": source, "notice": notice}))
+    db.commit()
+
+
+def save_tailored_edits(db: Session, user_id: str, job_id: str, edits: dict | None) -> None:
+    row = db.get(TailoredResumeRecord, (user_id, job_id))
+    if row is None:
+        raise NotReady("Optimize your resume for this job first.")
+    row.edits, row.updated_at = edits, _now()
     db.commit()

@@ -26,7 +26,7 @@ def row_counts(sub):
 
 def full_user(client, sub, fake_gaps, fake, searcher):  # noqa: F811
     """Signed in with data in every table: profile, chat, gaps, resources, approval, roadmap, checks, report,
-    progress review, job search and feedback."""
+    progress review, job search, tailored resume and feedback."""
     ids = approved_user(client, sub, fake_gaps)
     generate(client)
     assert client.put("/api/resources/progress", json={"resource_id": ids[0], "saved": True}).status_code == 200
@@ -37,6 +37,7 @@ def full_user(client, sub, fake_gaps, fake, searcher):  # noqa: F811
     searcher.jobs.results = [finding(1)]
     job = client.post("/api/jobs/search", json={"remote": True}).json()["jobs"][0]["job"]["id"]
     assert client.put("/api/jobs/marks", json={"job_id": job, "saved": True}).status_code == 200
+    assert client.post(f"/api/resume-optimizer/{job}").status_code == 200
     assert client.post("/api/feedback", json={"rating": 4, "message": "Useful."}).status_code == 200
     with dbmod.SessionLocal() as db:
         repository.append_message(db, sub, "user", "hello")

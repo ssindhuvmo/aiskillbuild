@@ -20,10 +20,13 @@ specification (v2).
 11. Dashboard and Progress Review (readiness score, skill coverage, roadmap completion, radar and trend
     charts, completed skills, confidence ratings, notes, refreshing the remaining weeks) — done
 
-The look follows `docs/mockups/`; parts of the mockups that belong to later milestones (View Demo, Jobs
-Applied) are not built yet. Resume Optimizer is a placeholder in the sidebar.
-12. Job Match (live search of an allowlist of job sites, verified links, match score, Save / Apply) — built,
-    in testing
+12. Job Match (live search of an allowlist of job sites, verified links, match score, Save / Apply) and the
+    Feedback page — done
+13. Resume Optimizer (the resume tailored to one job from your resume and completed roadmap work, editable,
+    PDF / DOCX / copy) — built, in testing
+
+The look follows `docs/mockups/`; parts of the mockups that belong to a later milestone (View Demo) are not
+built yet.
 
 ## Google sign-in setup (once)
 
@@ -225,7 +228,16 @@ Open the app at `http://localhost:5173` (not `127.0.0.1`) so it matches the auth
     **Save Job** keeps a job across refreshes, and the Dashboard's **Jobs Applied** counts them. The
     **Salary range** filter uses the salary the posting states. Mark a skill complete on Progress Review and
     the match scores rise without searching again.
-15. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
+15. In the job's panel click **Update Resume** (or open **Resume Optimizer** and pick a job), then
+    **Optimize my resume** (15–30 seconds). The current and optimized resumes appear side by side, with
+    added or reworded words highlighted. Employers, titles and dates are always copied from your reviewed
+    resume; skills, portfolio projects and courses appear only once you have completed them (tick a phase's
+    project tasks on the roadmap, or **Complete** a course on Resources, then **Optimize again**: the page
+    says when your progress has changed). What the job needs that you haven't done is listed under **To add
+    once you have done this**. **Edit** lets you change the wording and fill in the `[placeholders]`;
+    **Undo my edits** goes back to the AI's version. **Download PDF**, **Download DOCX** and **Copy Content**
+    export only the resume. Each job keeps its own version.
+16. Restart the servers and sign in with the same Google account — the chat, profile, skill analysis,
     resources, approval, roadmap, ticks and report reload. A different Google account starts empty. Editing the profile marks
     everything after it out of date: re-confirm the skills, **Rebuild the list**, approve it again, then
     **Regenerate Roadmap**. Refining the list after approval asks you to approve again, and the new approval

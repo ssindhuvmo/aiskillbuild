@@ -178,6 +178,24 @@ class JobMark(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
 
+class TailoredResumeRecord(Base):
+    """A resume tailored to one job (Resume Optimizer, one row per user and job). `text` is the checked
+    TailoredText, `edits` the user's own changes (None = none), `snapshot` the Evidence it was written from
+    (stale when that changes). Carries the Job, so it survives a job search refresh."""
+
+    __tablename__ = "tailored_resumes"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    job: Mapped[dict] = mapped_column(JSON)
+    snapshot: Mapped[dict] = mapped_column(JSON)
+    text: Mapped[dict] = mapped_column(JSON)
+    edits: Mapped[dict | None] = mapped_column(JSON)
+    source: Mapped[str] = mapped_column(String(16))  # ai | default
+    notice: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
 class Feedback(Base):
     """A message from the feedback form (many per user). "Start over" sets user_id to None instead of deleting
     the row, so the feedback stays but no longer points to anyone. Read with scripts/list_feedback.py."""
